@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "vox-harbor"
+version = "0.1.0"
+description = ""
+authors = []
+
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.103.1"
+uvicorn = "^0.23.2"
+pyrogram = "^2.0.106"
+cachetools = "^5.3.1"
+asynch = "^0.2.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
