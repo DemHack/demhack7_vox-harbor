@@ -8,10 +8,6 @@ CREATE TABLE comments
     channel_id Nullable(Int64),
     post_id Nullable(Int64),
 
-    username Nullable(String),
-    first_name Nullable(String),
-    last_name Nullable(String),
-
     bot_index UInt8,
     shard UInt8
 )

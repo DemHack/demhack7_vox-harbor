@@ -11,3 +11,5 @@ class Config:
     CLICKHOUSE_HOST = os.getenv('CLICKHOUSE_HOST')
     CLICKHOUSE_PORT = int(os.getenv('CLICKHOUSE_PORT', 9440))
     CLICKHOUSE_PASSWORD = os.getenv('CLICKHOUSE_PASSWORD')
+
+    AUTO_DISCOVER = False

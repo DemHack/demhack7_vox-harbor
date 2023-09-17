@@ -51,12 +51,20 @@ class Comment(_Base):
     channel_id: int | None
     post_id: int | None
 
-    username: str | None
-    first_name: str | None
-    last_name: str | None
-
     bot_index: int
     shard: int
+
+
+class User(_Base):
+    user_id: int
+    username: str
+    name: str
+
+
+class CommentRange(_Base):
+    chat_id: int
+    min_message_id: int
+    max_message_id: int
 
 
 class EmptyResponse(_Base):

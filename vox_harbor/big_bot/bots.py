@@ -3,8 +3,9 @@ import cachetools
 import logging
 import random
 
-from pyrogram import Client, types
 import pyrogram.errors.exceptions
+from pyrogram import Client, types, raw, utils
+from aiolimiter import AsyncLimiter
 
 from vox_harbor.big_bot import structures
 from vox_harbor.big_bot.chats import ChatsManager
@@ -24,6 +25,8 @@ class Bot(Client):
         self._subscribed_chats: set[int] = set()
 
         self.logger = logging.getLogger(f'vox_harbor.big_bot.bots.bot.{bot_index}')
+
+        self.history_limiter = AsyncLimiter(2, 1)
 
     async def resolve_invite_callback(self, chat_title: str, channel_id: int):
         if chat_title not in self._invites_callback:
@@ -55,6 +58,10 @@ class Bot(Client):
         self._subscribed_chats.remove(chat_id)
 
     async def join_chat(self, join_string: str | int):
+        # todo: fix this bullshit
+        if join_string == 777000 or join_string == '777000':
+            return
+
         if len(self._subscribed_chats) > Config.MAX_CHATS_FOR_BOT:
             raise ValueError('Too many chats')
 
@@ -64,6 +71,10 @@ class Bot(Client):
         return chat
 
     async def discover_chat(self, join_string: str, with_linked: bool = True):
+        # todo: fix this bullshit
+        if join_string == 777000 or join_string == '777000':
+            return
+
         try:
             join_string = int(join_string)
         except ValueError:
@@ -125,6 +136,30 @@ class Bot(Client):
 
             await chats.register_new_chat(self.index, chat.id, join_string)
 
+    async def get_message_witch_cache(self, chat_id: int, message_id: int):
+        if (chat_id, message_id) in self.message_cache.store:
+            return self.message_cache[chat_id, message_id]
+
+        return await self.get_messages(chat_id=chat_id, message_ids=message_id, replies=0)
+
+    async def get_history(self, chat_id: int, start: int, end: int, limit: int) -> list[types.Message]:
+        await self.history_limiter.acquire()
+        raw_messages = await self.invoke(
+            raw.functions.messages.GetHistory(
+                peer=await self.resolve_peer(chat_id),
+                offset_id=start,
+                offset_date=0,
+                add_offset=0,
+                limit=limit,
+                max_id=0,
+                min_id=end,
+                hash=0
+            ),
+            sleep_threshold=60
+        )
+
+        return await utils.parse_messages(self, raw_messages, replies=0)
+
 
 class BotManager:
     """
@@ -168,7 +203,8 @@ class BotManager:
 
             self._discover_cache[join_string] = True
 
-        weights = [len(await bot.get_subscribed_chats()) for bot in self.bots]
+        total = sum([len(await bot.get_subscribed_chats()) for bot in self.bots])
+        weights = [total / len(await bot.get_subscribed_chats()) for bot in self.bots]
         bot: Bot = random.choices(self.bots, weights=weights)[0]
         return await bot.discover_chat(join_string)
 

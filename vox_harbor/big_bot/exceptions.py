@@ -10,3 +10,8 @@ class AlreadyJoinedError(BigBotException):
 
 class MessageNotFoundError(BigBotException):
     pass
+
+
+class TaskStepError(BigBotException):
+    pass
+
