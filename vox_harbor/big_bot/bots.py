@@ -70,7 +70,7 @@ class Bot(Client):
         self._subscribed_chats.add(chat.id)
         return chat
 
-    async def discover_chat(self, join_string: str, with_linked: bool = True):
+    async def discover_chat(self, join_string: str, with_linked: bool = True, join_no_check: bool = False):
         # todo: fix this bullshit
         if join_string == 777000 or join_string == '777000':
             return
@@ -109,12 +109,15 @@ class Bot(Client):
 
         self.logger.info('discovered chat with id %s', chat.id)
 
-        await self.try_join_discover_chat(chat, str(join_string))
-        if with_linked and chat.linked_chat:
-            linked_join_string = chat.linked_chat.username or str(chat.linked_chat.id)
-            await self.discover_chat(linked_join_string, with_linked=False)
+        if join_no_check:  # direct join to the chat in case if we are loading from ChatsManager
+            await self.join_chat(chat.id)
+        else:
+            await self.try_join_discovered_chat(chat, str(join_string))
+            if with_linked and chat.linked_chat:
+                linked_join_string = chat.linked_chat.username or str(chat.linked_chat.id)
+                await self.discover_chat(linked_join_string, with_linked=False)
 
-    async def try_join_discover_chat(self, chat: types.Chat, join_string: str):
+    async def try_join_discovered_chat(self, chat: types.Chat, join_string: str):
         chats = await ChatsManager.get_instance(await BotManager.get_instance())
 
         if known_chat := chats.known_chats.get(chat.id):

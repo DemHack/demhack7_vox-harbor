@@ -5,5 +5,5 @@ CREATE TABLE bots
     shard UInt8,
     session_string String
 )
-ENGINE = SharedMergeTree()
+ENGINE = SharedReplacingMergeTree()
 ORDER BY (shard, id)

@@ -82,7 +82,7 @@ async def process_message(bot: Bot, message: types.Message):
     # This will handle scenario if our bot were added to the chat by another user
     # In other cases this will do nothing.
     bot.add_subscribed_chat(message.chat.id)
-    await bot.try_join_discover_chat(message.chat, '')
+    await bot.try_join_discovered_chat(message.chat, '')
 
     if Config.AUTO_DISCOVER:
         possible_chats = []

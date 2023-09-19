@@ -80,7 +80,7 @@ class ChatsManager:
             if chat.id not in await bot.get_subscribed_chats():
                 try:
                     if chat.join_string:
-                        await bot.discover_chat(chat.join_string)
+                        await bot.discover_chat(chat.join_string, join_no_check=True)
                     else:
                         await bot.join_chat(chat.id)
 
