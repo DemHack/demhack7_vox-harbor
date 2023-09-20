@@ -12,6 +12,7 @@ uvicorn = "^0.23.2"
 pyrogram = "^2.0.106"
 cachetools = "^5.3.1"
 asynch = "^0.2.2"
+aiolimiter = "^1.1.0"
 
 
 [build-system]

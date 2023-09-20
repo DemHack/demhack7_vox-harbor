@@ -1,16 +1,18 @@
 import asyncio
-import cachetools
 import logging
 import random
+from typing import Iterable
 
+import cachetools
 import pyrogram.errors.exceptions
-from pyrogram import Client, types, raw, utils
 from aiolimiter import AsyncLimiter
+from pyrogram import Client, raw, types, utils
+from pyrogram.types.messages_and_media.message import Message as PyrogramMessage
 
 from vox_harbor.big_bot import structures
 from vox_harbor.big_bot.chats import ChatsManager
 from vox_harbor.big_bot.configs import Config
-from vox_harbor.big_bot.exceptions import AlreadyJoinedError, MessageNotFoundError
+from vox_harbor.big_bot.exceptions import AlreadyJoinedError
 from vox_harbor.common.db_utils import session_scope
 from vox_harbor.common.exceptions import format_exception
 
@@ -156,9 +158,9 @@ class Bot(Client):
                 limit=limit,
                 max_id=0,
                 min_id=end,
-                hash=0
+                hash=0,
             ),
-            sleep_threshold=60
+            sleep_threshold=60,
         )
 
         return await utils.parse_messages(self, raw_messages, replies=0)
@@ -211,23 +213,18 @@ class BotManager:
         bot: Bot = random.choices(self.bots, weights=weights)[0]
         return await bot.discover_chat(join_string)
 
-    async def get_message(self, bot_index: int, chat_id: int, message_id: int):
-        bot = self.bots[bot_index]
-        messages = await bot.get_messages(chat_id, message_ids=[message_id])
-        if not messages:
-            raise MessageNotFoundError('Not found')
-
-        return messages[0]
+    async def get_messages(self, bot_index: int, chat_id: int, message_ids: Iterable[int]) -> list[PyrogramMessage]:
+        return await self.bots[bot_index].get_messages(chat_id, message_ids=message_ids)  # type: ignore
 
     @classmethod
-    async def get_instance(cls) -> 'BotManager':
+    async def get_instance(cls, shard: int = Config.SHARD_NUM) -> 'BotManager':
         global _manager
 
         if _manager is not None:
             return _manager
 
         async with session_scope() as session:
-            await session.execute('SELECT * FROM bots WHERE shard == %(shard)s', {'shard': Config.SHARD_NUM})
+            await session.execute('SELECT * FROM bots WHERE shard == %(shard)s', {'shard': shard})
             bots_data = structures.Bot.from_rows(await session.fetchall())
 
             if len(bots_data) < Config.ACTIVE_BOTS_COUNT:
@@ -252,7 +249,7 @@ class BotManager:
 
                 bots_data[i] = bots_data[j]
 
-        bots_data = bots_data[:Config.ACTIVE_BOTS_COUNT]
+        bots_data = bots_data[: Config.ACTIVE_BOTS_COUNT]
 
         bots: list[Bot] = []
         for i, bot in enumerate(bots_data):
