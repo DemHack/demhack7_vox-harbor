@@ -11,7 +11,7 @@ from pyrogram.types.messages_and_media.message import Message as PyrogramMessage
 
 from vox_harbor.big_bot import structures
 from vox_harbor.big_bot.chats import ChatsManager
-from vox_harbor.big_bot.configs import Config
+from vox_harbor.big_bot.configs import Config, Mode
 from vox_harbor.big_bot.exceptions import AlreadyJoinedError
 from vox_harbor.common.db_utils import session_scope
 from vox_harbor.common.exceptions import format_exception
@@ -223,8 +223,22 @@ class BotManager:
         if _manager is not None:
             return _manager
 
+        if Config.MODE == Mode.PROD:
+            target_table = 'bots'
+        elif Config.MODE == Mode.DEV_1:
+            target_table = 'bots_dev_1'
+        elif Config.MODE == Mode.DEV_2:
+            target_table = 'bots_dev_2'
+        else:
+            raise ValueError(f'Unknown mode {Config.MODE}')
+
+        cls.logger.info(f'loading bots from table {target_table}')
         async with session_scope() as session:
-            await session.execute('SELECT * FROM bots WHERE shard == %(shard)s', {'shard': shard})
+            # noinspection SqlResolve
+            await session.execute(
+                f'SELECT * FROM {target_table} WHERE shard == %(shard)s',
+                dict(shard=shard)
+            )
             bots_data = structures.Bot.from_rows(await session.fetchall())
 
             if len(bots_data) < Config.ACTIVE_BOTS_COUNT:

@@ -1,7 +1,15 @@
 import os
+import enum
+
+
+class Mode(enum.StrEnum):
+    PROD = enum.auto()
+    DEV_1 = enum.auto()
+    DEV_2 = enum.auto()
 
 
 class Config:
+
     ACTIVE_BOTS_COUNT = int(os.getenv('ACTIVE_BOTS_COUNT', 3))
     SHARD_NUM = int(os.getenv('SHARD_NUM', 0))
 
@@ -11,5 +19,7 @@ class Config:
     CLICKHOUSE_HOST = os.getenv('CLICKHOUSE_HOST')
     CLICKHOUSE_PORT = int(os.getenv('CLICKHOUSE_PORT', 9440))
     CLICKHOUSE_PASSWORD = os.getenv('CLICKHOUSE_PASSWORD')
+
+    MODE = Mode[os.getenv('MODE')]
 
     AUTO_DISCOVER = False
