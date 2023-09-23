@@ -236,8 +236,7 @@ class BotManager:
         async with session_scope() as session:
             # noinspection SqlResolve
             await session.execute(
-                f'SELECT * FROM {target_table} WHERE shard == %(shard)s',
-                dict(shard=shard)
+                f'SELECT * FROM {target_table} WHERE shard == %(shard)s ORDER BY id', dict(shard=shard)
             )
             bots_data = structures.Bot.from_rows(await session.fetchall())
 
