@@ -1,7 +1,7 @@
 import asyncio
 import logging
+import typing as tp
 
-import fastapi
 import uvicorn
 from pyrogram.handlers import MessageHandler, RawUpdateHandler
 from pyrogram.methods.utilities.idle import idle
@@ -14,8 +14,6 @@ from vox_harbor.big_bot.tasks import HistoryTask, TaskManager
 from vox_harbor.common.db_utils import session_scope, with_clickhouse
 
 logger = logging.getLogger('vox_harbor.big_bot.main')
-
-app = fastapi.FastAPI(on_startup=[lambda: asyncio.create_task(big_bots_main())])
 
 
 async def generate_task(tasks: TaskManager, bot: Bot, chat_id: int):
@@ -66,7 +64,7 @@ async def generate_tasks():
     tasks.start()
 
 
-async def _big_bots_main():
+async def _big_bots_main(jobs: tp.Iterable[tp.Callable[[], tp.Awaitable]]):
     handlers.inserter.start()
     manager = await BotManager.get_instance()
 
@@ -79,13 +77,13 @@ async def _big_bots_main():
     # asyncio.create_task(generate_tasks())
     try:
         await ChatsManager.get_instance(manager)
-        await idle()
+        await asyncio.gather(*(job() for job in jobs))
 
     finally:
         await manager.stop()
 
 
-async def big_bots_main():
+async def big_bots_main(*args: tp.Callable[[], tp.Awaitable]):
     async with with_clickhouse(
         host=Config.CLICKHOUSE_HOST,
         port=Config.CLICKHOUSE_PORT,
@@ -97,8 +95,7 @@ async def big_bots_main():
         minsize=10,
         maxsize=50,
     ):
-        await _big_bots_main()
+        if not args:
+            args = (idle,)
 
-
-def main():
-    uvicorn.run(app, workers=1)
+        await _big_bots_main(args)

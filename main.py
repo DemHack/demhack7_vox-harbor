@@ -1,6 +1,8 @@
 import logging
+import asyncio
 
-from vox_harbor.big_bot.main import main
+from vox_harbor.big_bot.main import big_bots_main
+from vox_harbor.big_bot.services.main import main as server_main
 
 logging.basicConfig(
     level=logging.INFO,
@@ -8,4 +10,4 @@ logging.basicConfig(
 )
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(big_bots_main(server_main))

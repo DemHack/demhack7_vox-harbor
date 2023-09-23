@@ -34,5 +34,6 @@ async def get_load() -> ShardLoad:
 
 
 @shard_router.post('/discover')
-async def discover(join_string: str, bot_index: int) -> None:
-    ...  # todo
+async def discover(join_string: str) -> None:
+    bot_manager = await BotManager.get_instance(Config.SHARD_NUM)
+    await bot_manager.discover_chat(join_string)

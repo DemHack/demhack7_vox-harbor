@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import typing as tp
 
 import uvicorn
 from fastapi import FastAPI
@@ -18,20 +19,7 @@ app.include_router(controller_router, prefix='/api/controller')
 app.include_router(shard_router, prefix='/api/shard')
 
 
-def _uvicorn_server(config: uvicorn.Config) -> asyncio.Task[None]:
+def main() -> tp.Awaitable:
+    config = uvicorn.Config("vox_harbor.big_bot.services.main:app", host="0.0.0.0", port=8002)
     server = uvicorn.Server(config)
-    return asyncio.create_task(server.serve())
-
-
-async def main() -> None:
-    config_bots = uvicorn.Config("vox_harbor.big_bot.main:app", host="0.0.0.0", port=8001)
-    config_controller = uvicorn.Config("vox_harbor.big_bot.services.main:app", host="0.0.0.0", port=8002)
-    configs = (config_bots, config_controller)
-
-    logger.info('servers started')
-
-    await asyncio.gather(*map(_uvicorn_server, configs))
-
-
-if __name__ == '__main__':
-    asyncio.run(main())
+    return server.serve()
