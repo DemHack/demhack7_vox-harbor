@@ -1,11 +1,12 @@
 import asyncio
 import datetime
 import logging
+from pyrogram import enums
 
 import vox_harbor.big_bot
 from vox_harbor.big_bot import structures
 from vox_harbor.big_bot.configs import Config
-from vox_harbor.common.db_utils import session_scope
+from vox_harbor.common.db_utils import session_scope, db_fetchall, db_fetchone
 from vox_harbor.common.exceptions import format_exception
 
 
@@ -35,10 +36,11 @@ class ChatsManager:
                 join_string=join_string,
                 shard=Config.SHARD_NUM,
                 bot_index=bot_index,
-                added=datetime.datetime.now().timestamp()
+                added=datetime.datetime.utcnow().timestamp(),
+                type=structures.Chat.Type.CHANNEL if chat.type == enums.ChatType.CHANNEL else structures.Chat.Type.CHAT,
             )
 
-            session.set_settings({'async_insert': True})
+            session.set_settings(dict(async_insert=True))
             await session.execute(
                 'INSERT INTO chats VALUES',
                 [chat_model.model_dump()]
@@ -46,6 +48,8 @@ class ChatsManager:
             self.logger.info('added new chat %s', chat_model.name)
 
         self.known_chats[chat_model.id] = chat_model
+
+        await bot.generate_history_task(self, chat_id, with_from_earliest=False)
         return True
 
     async def update(self):
@@ -53,12 +57,7 @@ class ChatsManager:
 
         join_count = 0
         leave_count = 0
-        async with session_scope() as session:
-            await session.execute(
-                'SELECT * FROM chats\n'
-            )
-
-            chats = structures.Chat.from_rows(await session.fetchall())
+        chats = await db_fetchall(structures.Chat, 'SELECT * FROM chats', raise_not_found=False)
 
         new_known_chats = {
             chat.id: chat
@@ -92,20 +91,15 @@ class ChatsManager:
         self.logger.info('joined %s, left %s', join_count, leave_count)
 
     async def run_once(self):
-        async with session_scope() as session:
-            await session.execute(
-                'SELECT * FROM chat_updates\n'
-                'WHERE shard = %(shard)s\n'
-                'ORDER BY added DESC\n'
-                'LIMIT 1',
-                {'shard': Config.SHARD_NUM}
-            )
-            try:
-                row = await session.fetchone()
-            except AttributeError:  # this was fixed, but no one wants to update pypi version
-                return
-
-            update = structures.ChatUpdate.from_row(row)
+        update = await db_fetchone(
+            structures.ChatUpdate,
+            'SELECT * FROM chat_updates\n'
+            'WHERE shard = %(shard)s\n'
+            'ORDER BY added DESC\n'
+            'LIMIT 1',
+            dict(shard=Config.SHARD_NUM),
+            raise_not_found=False,
+        )
 
         if update.added.timestamp() > self.last_updated:
             await self.bots.update_subscribe_chats()
@@ -116,7 +110,10 @@ class ChatsManager:
         while True:
             try:
                 await asyncio.sleep(self.INTERVAL)
-                await self.run_once()
+                # todo: fix timezones issue
+                # await self.run_once()
+
+                await self.update()
             except Exception as e:
                 self.logger.error('failed to update chats. %s', format_exception(e, with_traceback=True))
 
@@ -131,8 +128,7 @@ class ChatsManager:
             _manager = cls(bot_manager)
 
             await _manager.run_once()
-            # todo: fix timezones issue
-            # asyncio.get_running_loop().create_task(_manager.loop())
+            asyncio.create_task(_manager.loop())
             return
 
 

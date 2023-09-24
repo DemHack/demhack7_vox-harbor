@@ -1,7 +1,7 @@
 import datetime
-import typing as tp
-
+import enum
 import pydantic
+import typing as tp
 
 
 def model_to_tuple(pydantic_obj: pydantic.BaseModel) -> tuple[tp.Any, ...]:
@@ -31,6 +31,10 @@ class BrokenBot(_Base):
 
 
 class Chat(_Base):
+    class Type(enum.StrEnum):
+        CHAT = 'CHAT'
+        CHANNEL = 'CHANNEL'
+
     id: int
     name: str
     join_string: str
@@ -38,6 +42,15 @@ class Chat(_Base):
     shard: int
     bot_index: int
     added: datetime.datetime
+    type: Type
+
+
+class DiscoveredChat(_Base):
+    id: int
+    name: str
+    join_string: str
+    subscribers_count: int
+    sign: int
 
 
 class ChatUpdate(_Base):
@@ -84,6 +97,22 @@ class UserInfo(_Base):
     user_id: int
     usernames: list[str]
     names: list[str]
+
+
+class Log(_Base):
+    created: datetime.datetime
+    filename: str
+    func_name: str
+    levelno: int
+    lineno: int
+    message: str
+    name: str
+    shard: int
+    fqdn: str
+
+
+class DiscoverRequest(_Base):
+    join_string: str
 
 
 class ShardLoad(pydantic.BaseModel):

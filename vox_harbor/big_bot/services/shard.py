@@ -4,6 +4,7 @@ from operator import attrgetter
 
 from fastapi import APIRouter
 
+from vox_harbor.big_bot import structures
 from vox_harbor.big_bot.bots import BotManager
 from vox_harbor.big_bot.configs import Config
 from vox_harbor.big_bot.structures import Comment, Message, ShardLoad
@@ -34,6 +35,6 @@ async def get_load() -> ShardLoad:
 
 
 @shard_router.post('/discover')
-async def discover(join_string: str) -> None:
+async def discover(request: structures.DiscoverRequest) -> None:
     bot_manager = await BotManager.get_instance(Config.SHARD_NUM)
-    await bot_manager.discover_chat(join_string)
+    await bot_manager.discover_chat(request.join_string)

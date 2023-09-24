@@ -1,14 +1,13 @@
 import contextlib
-from functools import partial
 from operator import attrgetter
-from typing import Any, Iterable, Optional
+import typing as tp
 
 import asynch
 import pydantic
 from asynch.cursors import DictCursor
 from asynch.pool import Pool
 
-from vox_harbor.big_bot.configs import Config
+from vox_harbor.big_bot import structures
 from vox_harbor.common.exceptions import NotFoundError
 
 pool: Pool | None = None
@@ -26,20 +25,6 @@ async def with_clickhouse(**kwargs):
     pool = None
 
 
-clickhouse_default = partial(
-    with_clickhouse,
-    host=Config.CLICKHOUSE_HOST,
-    port=Config.CLICKHOUSE_PORT,
-    database='default',
-    user='default',
-    password=Config.CLICKHOUSE_PASSWORD,
-    secure=True,
-    echo=False,
-    minsize=10,
-    maxsize=50,
-)
-
-
 @contextlib.asynccontextmanager
 async def session_scope(cursor_type=DictCursor) -> DictCursor:
     if pool is None:
@@ -50,32 +35,49 @@ async def session_scope(cursor_type=DictCursor) -> DictCursor:
             yield cursor
 
 
-async def _db_fetch(
-    model: Any,
+async def db_fetchone(
+    model: tp.Type[structures._Base],
     query: str,
-    query_args: dict[str, Any],
-    name: Optional[str] = None,
+    query_args: dict[str, tp.Any] | None = None,
+    name: str | None = None,
     *,
-    fetch_all: bool,
-) -> Any:
+    raise_not_found: bool = True,
+) -> tp.Any:
+    if query_args is None:
+        query_args = {}
+
     async with session_scope() as session:
         await session.execute(query, query_args)
-
-        if fetch_all:
-            fetch, convert = session.fetchall, model.from_rows
-        else:
-            fetch, convert = session.fetchone, model.from_row
-
         try:
-            return convert(await fetch())
+            return model.from_row(await session.fetchone())
         except AttributeError as exc:
-            raise NotFoundError(name or model.__name__) from exc
+            if raise_not_found:
+                raise NotFoundError(name or model.__name__) from exc
+            return None
 
 
-db_fetchone = partial(_db_fetch, fetch_all=False)
-db_fetchall = partial(_db_fetch, fetch_all=True)
+async def db_fetchall(
+    model: tp.Type[structures._Base],
+    query: str,
+    query_args: dict[str, tp.Any] | None = None,
+    name: str | None = None,
+    *,
+    raise_not_found: bool = True,
+) -> tp.Any:
+    if query_args is None:
+        query_args = {}
+
+    async with session_scope() as session:
+        await session.execute(query, query_args)
+        try:
+            return model.from_rows(await session.fetchall())
+        except AttributeError as exc:
+            if raise_not_found:
+                raise NotFoundError(name or model.__name__) from exc
+
+            return []
 
 
-def rows_to_unique_column(rows: Iterable[pydantic.BaseModel], column: str) -> list[Any]:
+def rows_to_unique_column(rows: tp.Iterable[pydantic.BaseModel], column: str) -> list[tp.Any]:
     """Extract unique values from a column in an iterable of database rows."""
     return list(dict.fromkeys(map(attrgetter(column), rows)).keys())

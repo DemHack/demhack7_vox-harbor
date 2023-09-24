@@ -1,3 +1,4 @@
+aiolimiter==1.1.0
 annotated-types==0.5.0
 anyio==3.7.1
 asynch==0.2.2

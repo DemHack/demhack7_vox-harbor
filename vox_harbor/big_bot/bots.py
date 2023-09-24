@@ -6,14 +6,15 @@ from typing import Iterable
 import cachetools
 import pyrogram.errors.exceptions
 from aiolimiter import AsyncLimiter
-from pyrogram import Client, raw, types, utils
+from pyrogram import Client, raw, types, utils, enums
 from pyrogram.types.messages_and_media.message import Message as PyrogramMessage
 
 from vox_harbor.big_bot import structures
 from vox_harbor.big_bot.chats import ChatsManager
 from vox_harbor.big_bot.configs import Config, Mode
 from vox_harbor.big_bot.exceptions import AlreadyJoinedError
-from vox_harbor.common.db_utils import session_scope
+from vox_harbor.big_bot.tasks import HistoryTask, TaskManager
+from vox_harbor.common.db_utils import session_scope, db_fetchone
 from vox_harbor.common.exceptions import format_exception
 
 
@@ -29,6 +30,8 @@ class Bot(Client):
         self.logger = logging.getLogger(f'vox_harbor.big_bot.bots.bot.{bot_index}')
 
         self.history_limiter = AsyncLimiter(2, 1)
+
+        self.members_count_cache = cachetools.TTLCache(maxsize=10_000, ttl=300)
 
     async def resolve_invite_callback(self, chat_title: str, channel_id: int):
         if chat_title not in self._invites_callback:
@@ -60,10 +63,6 @@ class Bot(Client):
         self._subscribed_chats.remove(chat_id)
 
     async def join_chat(self, join_string: str | int):
-        # todo: fix this bullshit
-        if join_string == 777000 or join_string == '777000':
-            return
-
         if len(self._subscribed_chats) > Config.MAX_CHATS_FOR_BOT:
             raise ValueError('Too many chats')
 
@@ -73,21 +72,24 @@ class Bot(Client):
         return chat
 
     async def discover_chat(self, join_string: str, with_linked: bool = True, join_no_check: bool = False):
-        # todo: fix this bullshit
-        if join_string == 777000 or join_string == '777000':
-            return
-
         try:
             join_string = int(join_string)
         except ValueError:
             pass
 
+        if join_string == 777000:
+            return
+
         self.logger.info('discovering chat %s', join_string)
         preview = await self.get_chat(join_string)
         self.logger.info('chat title %s', preview.title)
 
-        if preview.members_count < Config.MIN_CHAT_MEMBERS_COUNT:
-            self.logger.info('not enough members to join, skip')
+        if preview.type == enums.ChatType.CHANNEL and preview.members_count < Config.MIN_CHANNEL_MEMBERS_COUNT:
+            self.logger.info('not enough members to join channel, skip')
+            return
+
+        elif preview.type != enums.ChatType.CHANNEL and preview.members_count < Config.MIN_CHAT_MEMBERS_COUNT:
+            self.logger.info('not enough members to join chat, skip')
             return
 
         if isinstance(preview, types.Chat):
@@ -120,8 +122,10 @@ class Bot(Client):
                 await self.discover_chat(linked_join_string, with_linked=False)
 
     async def try_join_discovered_chat(self, chat: types.Chat, join_string: str):
-        chats = await ChatsManager.get_instance(await BotManager.get_instance())
+        if chat.id == 777000:
+            return
 
+        chats = await ChatsManager.get_instance(await BotManager.get_instance())
         if known_chat := chats.known_chats.get(chat.id):
             if known_chat.shard == Config.SHARD_NUM and known_chat.bot_index == self.index:
                 if chat.id not in self._subscribed_chats:
@@ -164,6 +168,65 @@ class Bot(Client):
         )
 
         return await utils.parse_messages(self, raw_messages, replies=0)
+
+    async def generate_history_task(
+            self,
+            chats: ChatsManager,
+            chat_id: int,
+            with_from_earliest: bool = True
+    ):
+        tasks = await TaskManager.get_instance()
+        comment = await db_fetchone(
+            structures.CommentRange,
+            'SELECT chat_id, min(min_message_id) as min_message_id, max(max_message_id) as max_message_id FROM comments_range_mv WHERE chat_id = %(chat_id)s\n'
+            'GROUP BY chat_id',
+            dict(chat_id=chat_id),
+            raise_not_found=False
+        )
+
+        if not (chat := chats.known_chats.get(chat_id)):
+            return
+
+        if chat.type == structures.Chat.Type.CHANNEL:
+            return
+
+        if comment is None:
+            await tasks.add_task(
+                HistoryTask(
+                    bot=self,
+                    chat_id=chat_id,
+                    start_id=0,
+                    end_id=0,
+                )
+            )
+        else:
+            if comment.max_message_id and with_from_earliest:
+                await tasks.add_task(
+                    HistoryTask(
+                        bot=self,
+                        chat_id=chat_id,
+                        start_id=0,
+                        end_id=comment.max_message_id,
+                    )
+                )
+
+            if comment.min_message_id > 1000:
+                await tasks.add_task(
+                    HistoryTask(
+                        bot=self,
+                        chat_id=chat_id,
+                        start_id=comment.min_message_id,
+                        end_id=0,
+                    )
+                )
+
+    async def get_chat_members_count_with_cache(self, chat_id: int | str) -> int:
+        if chat_id in self.members_count_cache:
+            return self.members_count_cache.get(chat_id)
+
+        count = await self.get_chat_members_count(chat_id)
+        self.members_count_cache[chat_id] = count
+        return count
 
 
 class BotManager:

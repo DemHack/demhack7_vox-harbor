@@ -1,17 +1,14 @@
 import asyncio
 import datetime
 import logging
-import time
 
 from pyrogram import types, enums, raw, utils
 
+import vox_harbor.big_bot
 from vox_harbor.big_bot import structures
-from vox_harbor.big_bot.bots import Bot, BotManager
 from vox_harbor.big_bot.chats import ChatsManager
 from vox_harbor.big_bot.configs import Config
-from vox_harbor.big_bot.exceptions import AlreadyJoinedError
 from vox_harbor.common.db_utils import session_scope
-from vox_harbor.common.exceptions import format_exception
 
 logger = logging.getLogger('vox_harbor.handlers')
 
@@ -23,6 +20,7 @@ class BlockInserter:
     def __init__(self):
         self.comments = []
         self.users = []
+        self.chats = []
 
         self.lock = asyncio.Lock()
         self.last_flush = datetime.datetime.now()
@@ -31,14 +29,17 @@ class BlockInserter:
         async with self.lock:
             block_comments = self.comments.copy()
             block_users = self.users.copy()
+            block_chats = self.chats.copy()
             self.comments.clear()
             self.users.clear()
+            self.chats.clear()
 
         async with session_scope() as session:
             count = len(block_comments)
             session.set_settings({'async_insert': True})
             await session.execute('INSERT INTO comments VALUES', block_comments)
             await session.execute('INSERT INTO users VALUES', block_users)
+            await session.execute('INSERT INTO discovered_chats VALUES', block_chats)
             self.last_flush = datetime.datetime.now()
             logger.info('flushed %s records', count)
 
@@ -55,7 +56,7 @@ class BlockInserter:
             self.comments.append(
                 structures.Comment(
                     user_id=message.from_user.id,
-                    date=message.date,
+                    date=message.date.astimezone(datetime.timezone.utc),
                     chat_id=message.chat.id,
                     message_id=message.id,
                     channel_id=channel_id,
@@ -74,38 +75,43 @@ class BlockInserter:
                 ).model_dump()
             )
 
+    async def insert_chat(self, chat: types.Chat):
+        async with self.lock:
+            self.chats.append(
+                structures.DiscoveredChat(
+                    id=chat.id,
+                    name=chat.title or ' '.join((chat.first_name, chat.last_name)),
+                    join_string=chat.username,
+                    subscribers_count=chat.members_count,
+                    sign=1,
+                ).model_dump()
+            )
 
-async def process_message(bot: Bot, message: types.Message):
-    bots = await BotManager.get_instance()
-    chats = await ChatsManager.get_instance(bots)
+
+async def process_message(bot: 'vox_harbor.big_bot.bots.Bot', message: types.Message):
+    chats = await ChatsManager.get_instance()
 
     # This will handle scenario if our bot were added to the chat by another user
     # In other cases this will do nothing.
     bot.add_subscribed_chat(message.chat.id)
     await bot.try_join_discovered_chat(message.chat, '')
 
-    if Config.AUTO_DISCOVER:
-        possible_chats = []
-        if message.sender_chat and message.sender_chat.id not in chats.known_chats:
-            possible_chats.append(message.sender_chat)
+    if (
+        message.forward_from_chat and
+        message.forward_from_chat.type not in (enums.ChatType.PRIVATE, enums.ChatType.BOT) and
+        message.forward_from_chat.id not in chats.known_chats and
+        message.forward_from_chat.username
+    ):
+        chat = message.forward_from_chat
+
+        if chat.members_count is None:
+            chat.members_count = await bot.get_chat_members_count_with_cache(chat.id)
 
         if (
-            message.forward_from_chat and
-            message.forward_from_chat.type not in (enums.ChatType.PRIVATE, enums.ChatType.BOT) and
-            message.forward_from_chat.id not in chats.known_chats
+            (chat.type == enums.ChatType.CHANNEL and chat.members_count >= Config.MIN_CHANNEL_MEMBERS_COUNT) or
+            (chat.type != enums.ChatType.CHANNEL and chat.members_count >= Config.MIN_CHAT_MEMBERS_COUNT)
         ):
-            possible_chats.append(message.forward_from_chat)
-
-        if message.chat.linked_chat and message.chat.linked_chat.id not in chats.known_chats:
-            possible_chats.append(message.chat.linked_chat)
-
-        for chat in possible_chats:
-            try:
-                await bots.discover_chat(chat.username or str(chat.id))
-            except AlreadyJoinedError:
-                pass
-            except Exception as e:
-                logger.error('found new chat, but failed to join: %s', format_exception(e))
+            await inserter.insert_chat(chat)
 
     if message.chat.type == enums.ChatType.CHANNEL:
         # todo: here will be reactions statistic
@@ -126,7 +132,7 @@ async def process_message(bot: Bot, message: types.Message):
     await inserter.insert(message, bot.index, channel_id, post_id)
 
 
-async def channel_confirmation_handler(client: Bot, update, _, chats):
+async def channel_confirmation_handler(client: 'vox_harbor.big_bot.bots.Bot', update, _, chats):
     if isinstance(update, raw.types.UpdateChannel):
         channel: raw.types.Channel = chats[update.channel_id]
         logger.info('got confirmation for %s', channel.title)

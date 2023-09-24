@@ -2,7 +2,7 @@ import abc
 import asyncio
 import logging
 
-from vox_harbor.big_bot.bots import Bot
+import vox_harbor.big_bot
 from vox_harbor.big_bot.handlers import process_message
 from vox_harbor.common.exceptions import format_exception
 
@@ -38,6 +38,10 @@ class Task(abc.ABC):
         raise NotImplementedError()
 
     @property
+    def id(self) -> str:
+        raise NotImplementedError()
+
+    @property
     def failed(self) -> bool:
         return self._retries_count >= self.MAX_RETRIES
 
@@ -50,7 +54,7 @@ class Task(abc.ABC):
         raise NotImplementedError()
 
     def __str__(self) -> str:
-        return f'{self.__class__.__name__} ({round(self.progress, 1)}%)'
+        return f'{self.__class__.__name__}{{{self.id}}} ({round(self.progress, 1)}%)'
 
     __repr__ = __str__
 
@@ -60,7 +64,7 @@ class HistoryTask(Task):
 
     DELTA = 3
 
-    def __init__(self, bot: Bot, chat_id: int, start_id: int = 0, end_id: int = 0, limit: int = 100):
+    def __init__(self, bot: 'vox_harbor.big_bot.bots.Bot', chat_id: int, start_id: int = 0, end_id: int = 0, limit: int = 100):
         super().__init__()
         self.bot = bot
 
@@ -68,6 +72,8 @@ class HistoryTask(Task):
         self.start = start_id
         self.end = end_id
         self.limit = limit
+
+        self._id = f'{self.chat_id}_{self.start}_{self.end}'
 
         self.count = 0
         self.current_offset = start_id
@@ -100,16 +106,24 @@ class HistoryTask(Task):
     def finished(self) -> bool:
         return self.total - self.start + self.current_offset < self.DELTA or self._finished
 
+    @property
+    def id(self) -> str:
+        return self._id
+
 
 class TaskManager:
     logger = logging.getLogger('vox_harbor.big_bot.tasks')
 
     def __init__(self):
-        self.tasks: list[Task] = []
+        self.tasks: dict[str, Task] = {}
 
     async def add_task(self, task: Task):
+        if task.id in self.tasks:
+            self.logger.info('already processing this task %s', task)
+            return
+
         self.logger.info('new task %s', task)
-        self.tasks.append(task)
+        self.tasks[task.id] = task
 
     async def loop(self):
         while True:
@@ -119,13 +133,13 @@ class TaskManager:
             while self.tasks:
                 await asyncio.gather(*(
                     task.do_step()
-                    for task in self.tasks
+                    for task in self.tasks.values()
                 ))
 
                 self.logger.info(self.tasks)
-                for task in self.tasks:
+                for task in self.tasks.copy().values():
                     if task.done:
-                        self.tasks.remove(task)
+                        del self.tasks[task.id]
 
     def start(self):
         asyncio.create_task(self.loop())
