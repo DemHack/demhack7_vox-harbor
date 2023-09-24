@@ -13,6 +13,24 @@ pyrogram = "^2.0.106"
 cachetools = "^5.3.1"
 asynch = "^0.2.2"
 aiolimiter = "^1.1.0"
+pytest = "^7.4.2"
+pytest-asyncio = "^0.21.1"
+httpx = "^0.25.0"
+coverage = "^7.3.1"
+pydantic-settings = "^2.0.3"
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ['smoke']
+addopts = "-v"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.coverage.run]
+omit = ["tests/*", "__init__.py"]
+
+[tool.coverage.report]
+exclude_also = ["raise NotImplementedError"]
 
 
 [build-system]

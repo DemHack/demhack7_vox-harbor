@@ -6,15 +6,15 @@ from typing import Iterable
 import cachetools
 import pyrogram.errors.exceptions
 from aiolimiter import AsyncLimiter
-from pyrogram import Client, raw, types, utils, enums
+from pyrogram import Client, enums, raw, types, utils
 from pyrogram.types.messages_and_media.message import Message as PyrogramMessage
 
 from vox_harbor.big_bot import structures
 from vox_harbor.big_bot.chats import ChatsManager
-from vox_harbor.big_bot.configs import Config, Mode
 from vox_harbor.big_bot.exceptions import AlreadyJoinedError
 from vox_harbor.big_bot.tasks import HistoryTask, TaskManager
-from vox_harbor.common.db_utils import session_scope, db_fetchone
+from vox_harbor.common.config import Mode, config
+from vox_harbor.common.db_utils import db_fetchone, session_scope
 from vox_harbor.common.exceptions import format_exception
 
 
@@ -63,7 +63,7 @@ class Bot(Client):
         self._subscribed_chats.remove(chat_id)
 
     async def join_chat(self, join_string: str | int):
-        if len(self._subscribed_chats) > Config.MAX_CHATS_FOR_BOT:
+        if len(self._subscribed_chats) > config.MAX_CHATS_FOR_BOT:
             raise ValueError('Too many chats')
 
         self.logger.info('joining %s', join_string)
@@ -84,11 +84,11 @@ class Bot(Client):
         preview = await self.get_chat(join_string)
         self.logger.info('chat title %s', preview.title)
 
-        if preview.type == enums.ChatType.CHANNEL and preview.members_count < Config.MIN_CHANNEL_MEMBERS_COUNT:
+        if preview.type == enums.ChatType.CHANNEL and preview.members_count < config.MIN_CHANNEL_MEMBERS_COUNT:
             self.logger.info('not enough members to join channel, skip')
             return
 
-        elif preview.type != enums.ChatType.CHANNEL and preview.members_count < Config.MIN_CHAT_MEMBERS_COUNT:
+        elif preview.type != enums.ChatType.CHANNEL and preview.members_count < config.MIN_CHAT_MEMBERS_COUNT:
             self.logger.info('not enough members to join chat, skip')
             return
 
@@ -127,7 +127,7 @@ class Bot(Client):
 
         chats = await ChatsManager.get_instance(await BotManager.get_instance())
         if known_chat := chats.known_chats.get(chat.id):
-            if known_chat.shard == Config.SHARD_NUM and known_chat.bot_index == self.index:
+            if known_chat.shard == config.SHARD_NUM and known_chat.bot_index == self.index:
                 if chat.id not in self._subscribed_chats:
                     await self.join_chat(chat.id)
 
@@ -169,19 +169,14 @@ class Bot(Client):
 
         return await utils.parse_messages(self, raw_messages, replies=0)
 
-    async def generate_history_task(
-            self,
-            chats: ChatsManager,
-            chat_id: int,
-            with_from_earliest: bool = True
-    ):
+    async def generate_history_task(self, chats: ChatsManager, chat_id: int, with_from_earliest: bool = True):
         tasks = await TaskManager.get_instance()
         comment = await db_fetchone(
             structures.CommentRange,
             'SELECT chat_id, min(min_message_id) as min_message_id, max(max_message_id) as max_message_id FROM comments_range_mv WHERE chat_id = %(chat_id)s\n'
             'GROUP BY chat_id',
             dict(chat_id=chat_id),
-            raise_not_found=False
+            raise_not_found=False,
         )
 
         if not (chat := chats.known_chats.get(chat_id)):
@@ -280,20 +275,20 @@ class BotManager:
         return await self.bots[bot_index].get_messages(chat_id, message_ids=message_ids)  # type: ignore
 
     @classmethod
-    async def get_instance(cls, shard: int = Config.SHARD_NUM) -> 'BotManager':
+    async def get_instance(cls, shard: int = config.SHARD_NUM) -> 'BotManager':
         global _manager
 
         if _manager is not None:
             return _manager
 
-        if Config.MODE == Mode.PROD:
+        if config.MODE == Mode.PROD:
             target_table = 'bots'
-        elif Config.MODE == Mode.DEV_1:
+        elif config.MODE == Mode.DEV_1:
             target_table = 'bots_dev_1'
-        elif Config.MODE == Mode.DEV_2:
+        elif config.MODE == Mode.DEV_2:
             target_table = 'bots_dev_2'
         else:
-            raise ValueError(f'Unknown mode {Config.MODE}')
+            raise ValueError(f'Unknown mode {config.MODE}')
 
         cls.logger.info(f'loading bots from table {target_table}')
         async with session_scope() as session:
@@ -303,7 +298,7 @@ class BotManager:
             )
             bots_data = structures.Bot.from_rows(await session.fetchall())
 
-            if len(bots_data) < Config.ACTIVE_BOTS_COUNT:
+            if len(bots_data) < config.ACTIVE_BOTS_COUNT:
                 raise ValueError('Not enough bots to start up')
 
             await session.execute('SELECT * FROM broken_bots')
@@ -311,9 +306,9 @@ class BotManager:
 
         broken_bots_set = {b.id for b in broken_bots_data}
 
-        j = Config.ACTIVE_BOTS_COUNT
+        j = config.ACTIVE_BOTS_COUNT
         for i, bot in enumerate(bots_data):
-            if i >= Config.ACTIVE_BOTS_COUNT:
+            if i >= config.ACTIVE_BOTS_COUNT:
                 break
 
             if bot.id in broken_bots_set:
@@ -325,7 +320,7 @@ class BotManager:
 
                 bots_data[i] = bots_data[j]
 
-        bots_data = bots_data[: Config.ACTIVE_BOTS_COUNT]
+        bots_data = bots_data[: config.ACTIVE_BOTS_COUNT]
 
         bots: list[Bot] = []
         for i, bot in enumerate(bots_data):

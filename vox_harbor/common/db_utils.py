@@ -1,6 +1,6 @@
 import contextlib
-from operator import attrgetter
 import typing as tp
+from operator import attrgetter
 
 import asynch
 import pydantic

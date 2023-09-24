@@ -1,12 +1,13 @@
 import asyncio
 import datetime
 import logging
+
 from pyrogram import enums
 
 import vox_harbor.big_bot
 from vox_harbor.big_bot import structures
-from vox_harbor.big_bot.configs import Config
-from vox_harbor.common.db_utils import session_scope, db_fetchall, db_fetchone
+from vox_harbor.common.config import config
+from vox_harbor.common.db_utils import db_fetchall, db_fetchone, session_scope
 from vox_harbor.common.exceptions import format_exception
 
 
@@ -34,17 +35,14 @@ class ChatsManager:
                 id=chat.id,
                 name=f'{chat.title or ""}' + (f' ({chat.username})' if chat.username else ''),
                 join_string=join_string,
-                shard=Config.SHARD_NUM,
+                shard=config.SHARD_NUM,
                 bot_index=bot_index,
                 added=datetime.datetime.utcnow().timestamp(),
                 type=structures.Chat.Type.CHANNEL if chat.type == enums.ChatType.CHANNEL else structures.Chat.Type.CHAT,
             )
 
             session.set_settings(dict(async_insert=True))
-            await session.execute(
-                'INSERT INTO chats VALUES',
-                [chat_model.model_dump()]
-            )
+            await session.execute('INSERT INTO chats VALUES', [chat_model.model_dump()])
             self.logger.info('added new chat %s', chat_model.name)
 
         self.known_chats[chat_model.id] = chat_model
@@ -59,15 +57,14 @@ class ChatsManager:
         leave_count = 0
         chats = await db_fetchall(structures.Chat, 'SELECT * FROM chats', raise_not_found=False)
 
-        new_known_chats = {
-            chat.id: chat
-            for chat in chats
-        }
+        new_known_chats = {chat.id: chat for chat in chats}
         self.known_chats = new_known_chats
 
         for chat in chats:
             for i, bot in enumerate(self.bots):
-                if chat.id in await bot.get_subscribed_chats() and (chat.shard != Config.SHARD_NUM or chat.bot_index != i):
+                if chat.id in await bot.get_subscribed_chats() and (
+                    chat.shard != config.SHARD_NUM or chat.bot_index != i
+                ):
                     # Wrong bot index or shard
                     try:
                         await bot.leave_chat(chat.id)
@@ -93,11 +90,8 @@ class ChatsManager:
     async def run_once(self):
         update = await db_fetchone(
             structures.ChatUpdate,
-            'SELECT * FROM chat_updates\n'
-            'WHERE shard = %(shard)s\n'
-            'ORDER BY added DESC\n'
-            'LIMIT 1',
-            dict(shard=Config.SHARD_NUM),
+            'SELECT * FROM chat_updates\n' 'WHERE shard = %(shard)s\n' 'ORDER BY added DESC\n' 'LIMIT 1',
+            dict(shard=config.SHARD_NUM),
             raise_not_found=False,
         )
 
@@ -124,7 +118,7 @@ class ChatsManager:
             if _manager is not None:
                 return _manager
 
-            assert bot_manager is not None
+            assert bot_manager is not None  # fixme pufit
             _manager = cls(bot_manager)
 
             await _manager.run_once()

@@ -6,15 +6,15 @@ from fastapi import APIRouter
 
 from vox_harbor.big_bot import structures
 from vox_harbor.big_bot.bots import BotManager
-from vox_harbor.big_bot.configs import Config
 from vox_harbor.big_bot.structures import Comment, Message, ShardLoad
+from vox_harbor.common.config import config
 
 shard_router = APIRouter()
 
 
 @shard_router.post('/messages')
 async def get_messages(sorted_comments: list[Comment]) -> list[Message]:
-    bot_manager = await BotManager.get_instance(Config.SHARD_NUM)
+    bot_manager = await BotManager.get_instance(config.SHARD_NUM)
     tasks = []
 
     for bot_index, comments_by_bot_index in groupby(sorted_comments, attrgetter('bot_index')):
@@ -36,5 +36,5 @@ async def get_load() -> ShardLoad:
 
 @shard_router.post('/discover')
 async def discover(request: structures.DiscoverRequest) -> None:
-    bot_manager = await BotManager.get_instance(Config.SHARD_NUM)
+    bot_manager = await BotManager.get_instance(config.SHARD_NUM)
     await bot_manager.discover_chat(request.join_string)

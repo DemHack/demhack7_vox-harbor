@@ -4,7 +4,7 @@ import logging
 import socket
 
 from vox_harbor.big_bot import structures
-from vox_harbor.big_bot.configs import Config
+from vox_harbor.common.config import config
 from vox_harbor.common.db_utils import session_scope
 
 
@@ -25,7 +25,7 @@ class ClickHouseHandler(logging.Handler):
             lineno=record.lineno,
             message=self.format(record),
             name=record.name,
-            shard=Config.SHARD_NUM,
+            shard=config.SHARD_NUM,
             fqdn=self.fqdn,
         )
 

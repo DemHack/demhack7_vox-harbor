@@ -2,12 +2,12 @@ import asyncio
 import datetime
 import logging
 
-from pyrogram import types, enums, raw, utils
+from pyrogram import enums, raw, types, utils
 
 import vox_harbor.big_bot
 from vox_harbor.big_bot import structures
 from vox_harbor.big_bot.chats import ChatsManager
-from vox_harbor.big_bot.configs import Config
+from vox_harbor.common.config import config
 from vox_harbor.common.db_utils import session_scope
 
 logger = logging.getLogger('vox_harbor.handlers')
@@ -62,7 +62,7 @@ class BlockInserter:
                     channel_id=channel_id,
                     post_id=post_id,
                     bot_index=bot_index,
-                    shard=Config.SHARD_NUM,
+                    shard=config.SHARD_NUM,
                 ).model_dump()
             )
 
@@ -97,19 +97,18 @@ async def process_message(bot: 'vox_harbor.big_bot.bots.Bot', message: types.Mes
     await bot.try_join_discovered_chat(message.chat, '')
 
     if (
-        message.forward_from_chat and
-        message.forward_from_chat.type not in (enums.ChatType.PRIVATE, enums.ChatType.BOT) and
-        message.forward_from_chat.id not in chats.known_chats and
-        message.forward_from_chat.username
+        message.forward_from_chat
+        and message.forward_from_chat.type not in (enums.ChatType.PRIVATE, enums.ChatType.BOT)
+        and message.forward_from_chat.id not in chats.known_chats
+        and message.forward_from_chat.username
     ):
         chat = message.forward_from_chat
 
         if chat.members_count is None:
             chat.members_count = await bot.get_chat_members_count_with_cache(chat.id)
 
-        if (
-            (chat.type == enums.ChatType.CHANNEL and chat.members_count >= Config.MIN_CHANNEL_MEMBERS_COUNT) or
-            (chat.type != enums.ChatType.CHANNEL and chat.members_count >= Config.MIN_CHAT_MEMBERS_COUNT)
+        if (chat.type == enums.ChatType.CHANNEL and chat.members_count >= config.MIN_CHANNEL_MEMBERS_COUNT) or (
+            chat.type != enums.ChatType.CHANNEL and chat.members_count >= config.MIN_CHAT_MEMBERS_COUNT
         ):
             await inserter.insert_chat(chat)
 
