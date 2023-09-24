@@ -1,5 +1,6 @@
 from enum import StrEnum, auto
 from pprint import pprint
+from typing import Any, Optional
 
 import pydantic as pd
 import pydantic_settings as pds
@@ -24,6 +25,8 @@ class _Config(pds.BaseSettings):
     CONTROLLER_PORT: int = 8002
 
     SHARD_NUM: int = 0
+    SHARD_HOST: Optional[str] = None
+    SHARD_PORT: Optional[int] = None
     SHARD_HOSTS: str | list[str] = '127.0.0.1'
     SHARD_PORTS: str | list[int] = '8001'
 
@@ -54,23 +57,33 @@ class _Config(pds.BaseSettings):
 
     @property
     def shard_host(self) -> str:
-        return self.SHARD_HOSTS[self.SHARD_NUM]
+        return self.SHARD_HOST or self.SHARD_HOSTS[self.SHARD_NUM]
 
     @shard_host.setter
     def shard_host(self, host: str) -> None:
-        self.SHARD_HOSTS[self.SHARD_NUM] = host  # type: ignore
+        self.SHARD_HOST = host  # type: ignore
 
     @property
     def shard_port(self) -> int:
-        return self.SHARD_PORTS[self.SHARD_NUM]  # type: ignore
+        return self.SHARD_PORT or self.SHARD_PORTS[self.SHARD_NUM]  # type: ignore
 
     @shard_port.setter
     def shard_port(self, port: int) -> None:
-        self.SHARD_PORTS[self.SHARD_NUM] = port  # type: ignore
+        self.SHARD_PORT = host  # type: ignore
 
     @property
     def shard_url(self) -> str:
         return f'http://{self.shard_host}:{self.shard_port}'
+
+
+def override_config(cfg: dict[str, Any]) -> None:
+    """Only use in CLI."""
+    cfg = {k.upper(): v for k, v in cfg.items()}
+
+    if extra_vars := set(cfg.keys()) - set(config.model_dump().keys()):
+        raise ValueError(f'Invalid vars: {", ".join(extra_vars)}')
+
+    vars(config).update(cfg)
 
 
 config = _Config()  # type: ignore
