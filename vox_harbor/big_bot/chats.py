@@ -72,6 +72,9 @@ class ChatsManager:
                     except Exception as e:
                         self.logger.error('failed to leave chat %s: %s', chat.name, format_exception(e))
 
+            if chat.shard != config.SHARD_NUM:
+                continue
+
             bot = self.bots[chat.bot_index]
             if chat.id not in await bot.get_subscribed_chats():
                 try:
@@ -90,7 +93,10 @@ class ChatsManager:
     async def run_once(self):
         update = await db_fetchone(
             structures.ChatUpdate,
-            'SELECT * FROM chat_updates\n' 'WHERE shard = %(shard)s\n' 'ORDER BY added DESC\n' 'LIMIT 1',
+            'SELECT * FROM chat_updates\n' 
+            'WHERE shard = %(shard)s\n' 
+            'ORDER BY added DESC\n' 
+            'LIMIT 1',
             dict(shard=config.SHARD_NUM),
             raise_not_found=False,
         )
@@ -121,7 +127,7 @@ class ChatsManager:
             assert bot_manager is not None  # fixme pufit
             _manager = cls(bot_manager)
 
-            await _manager.run_once()
+            await _manager.update()
             asyncio.create_task(_manager.loop())
             return
 
