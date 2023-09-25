@@ -1,4 +1,6 @@
 import asyncio
+import typing as tp
+import uvicorn
 from collections import defaultdict
 from itertools import chain, groupby
 from operator import attrgetter
@@ -6,21 +8,21 @@ from typing import Iterable
 
 from fastapi import APIRouter
 
-from vox_harbor.big_bot.services import shard as shard_service
 from vox_harbor.big_bot.structures import Comment, Message, User, UserInfo
+from vox_harbor.common.config import config
 from vox_harbor.common.db_utils import db_fetchall, rows_to_unique_column
 from vox_harbor.common.exceptions import NotFoundError
 
-controller_router = APIRouter()
+controller = APIRouter()
 
 
-@controller_router.get('/user')
+@controller.get('/user')
 async def get_user(user_id: int) -> UserInfo:
     """Web UI (consumer)"""
     return _users_to_user_info(await _get_sorted_users_by_user_ids(user_ids=[user_id]))
 
 
-@controller_router.get('/users')
+@controller.get('/users')
 async def get_users(username: str, limit: int = 10) -> dict[str, list[UserInfo]]:
     """Web UI (consumer)"""
     username_query = """--sql
@@ -78,12 +80,12 @@ def _users_to_users_info(users_rows: list[User]) -> list[UserInfo]:
     return users_info
 
 
-@controller_router.get('/messages_by_user_id')
+@controller.get('/messages_by_user_id')
 async def get_messages_by_user_id(user_id: int) -> list[Message]:
-    return await get_messages(await get_comments((user_id)))
+    return await get_messages(await get_comments(user_id))
 
 
-@controller_router.get('/comments')
+@controller.get('/comments')
 async def get_comments(user_id: int) -> list[Comment]:
     """Web UI (consumer). Use with get_messages."""
     # todo later: offset - https://docs.pyrogram.org/api/methods/get_messages#get-messages
@@ -97,7 +99,7 @@ async def get_comments(user_id: int) -> list[Comment]:
     return await db_fetchall(Comment, query, dict(user_id=user_id), name='messages')
 
 
-@controller_router.post('/messages')
+@controller.post('/messages')
 async def get_messages(comments: list[Comment]) -> list[Message]:
     """Web UI (consumer)"""
     if not (messages := await _get_messages(comments)):
@@ -111,14 +113,14 @@ async def _get_messages(comments: list[Comment]) -> list[Message]:
 
     for shard, comments_by_shard in groupby(sorted_comments, attrgetter('shard')):
         # todo get_msgs: httpx
-        get_msgs = shard_service.get_messages(list(comments_by_shard))
-
-        tasks.append(get_msgs)
+        # get_msgs = shard_service.get_messages(list(comments_by_shard))
+        # tasks.append(get_msgs)
+        ...
 
     return list(chain.from_iterable(await asyncio.gather(*tasks)))
 
 
-@controller_router.post('/discover')
+@controller.post('/discover')
 async def discover(join_string: str) -> None:
     """Web UI (consumer)"""
     # todo discover: WebUI -> Controller <-> shards
@@ -126,13 +128,19 @@ async def discover(join_string: str) -> None:
     ...
 
 
-@controller_router.post('/add_bot')
+@controller.post('/add_bot')
 async def add_bot(name: str, session_string: str) -> None:
     """Web UI (admin)"""
     # todo
 
 
-@controller_router.post('/remove_bot')
+@controller.post('/remove_bot')
 async def remove_bot(bot_id: int) -> None:
     """Web UI (admin)"""
     # todo
+
+
+def main() -> tp.Awaitable:
+    server_config = uvicorn.Config(controller, host=config.CONTROLLER_HOST, port=config.CONTROLLER_PORT, log_config=None)
+    server = uvicorn.Server(server_config)
+    return server.serve()

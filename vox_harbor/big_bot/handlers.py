@@ -134,7 +134,6 @@ async def process_message(bot: 'vox_harbor.big_bot.bots.Bot', message: types.Mes
 async def channel_confirmation_handler(client: 'vox_harbor.big_bot.bots.Bot', update, _, chats):
     if isinstance(update, raw.types.UpdateChannel):
         channel: raw.types.Channel = chats[update.channel_id]
-        logger.info('got confirmation for %s', channel.title)
         await client.resolve_invite_callback(channel.title, utils.get_channel_id(channel.id))
 
 

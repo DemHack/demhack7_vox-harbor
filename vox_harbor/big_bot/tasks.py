@@ -104,7 +104,13 @@ class HistoryTask(Task):
 
     @property
     def finished(self) -> bool:
-        return self.total - self.start + self.current_offset < self.DELTA or self._finished
+        if self._finished:
+            return True
+
+        if not self.start and not self.end:
+            return False
+
+        return self.total - self.start + self.current_offset < self.DELTA
 
     @property
     def id(self) -> str:

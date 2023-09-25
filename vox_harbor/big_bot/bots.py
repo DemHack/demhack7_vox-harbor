@@ -34,10 +34,12 @@ class Bot(Client):
         self.members_count_cache = cachetools.TTLCache(maxsize=10_000, ttl=300)
 
     async def resolve_invite_callback(self, chat_title: str, channel_id: int):
+        self.logger.info('got confirmation for %s', chat_title)
         if chat_title not in self._invites_callback:
             return
 
         self._invites_callback[chat_title].set_result(channel_id)
+        self.logger.info('callback resolved')
 
     async def update_subscribed_chats(self):
         new_chats = set()
@@ -57,10 +59,10 @@ class Bot(Client):
     def add_subscribed_chat(self, chat_id: int):
         self._subscribed_chats.add(chat_id)
 
-    async def leave_chat(self, chat_id: int, delete: bool = False):
+    async def leave_chat(self, chat_id: int, delete: bool = True):
         self.logger.info('leaving %s', chat_id)
-        await super().leave_chat(chat_id, delete)
         self._subscribed_chats.remove(chat_id)
+        await super().leave_chat(chat_id, delete)
 
     async def join_chat(self, join_string: str | int):
         if len(self._subscribed_chats) > config.MAX_CHATS_FOR_BOT:
@@ -134,7 +136,7 @@ class Bot(Client):
                 return
 
             if chat.id in self._subscribed_chats:
-                self.logger.info('this chat is already handled by another bot, leaving')
+                self.logger.info('this chat is already handled by another bot (%s), index=%s, leaving', known_chat, self.index)
                 try:
                     await self.leave_chat(chat.id)
                 except Exception as e:
@@ -182,38 +184,17 @@ class Bot(Client):
         if not (chat := chats.known_chats.get(chat_id)):
             return
 
-        if chat.type == structures.Chat.Type.CHANNEL:
+        if chat.type in (structures.Chat.Type.CHANNEL, structures.Chat.Type.PRIVATE):
             return
 
         if comment is None:
-            await tasks.add_task(
-                HistoryTask(
-                    bot=self,
-                    chat_id=chat_id,
-                    start_id=0,
-                    end_id=0,
-                )
-            )
+            await tasks.add_task(HistoryTask(bot=self, chat_id=chat_id, start_id=0, end_id=0))
         else:
             if comment.max_message_id and with_from_earliest:
-                await tasks.add_task(
-                    HistoryTask(
-                        bot=self,
-                        chat_id=chat_id,
-                        start_id=0,
-                        end_id=comment.max_message_id,
-                    )
-                )
+                await tasks.add_task(HistoryTask(bot=self, chat_id=chat_id, start_id=0, end_id=comment.max_message_id))
 
             if comment.min_message_id > 1000:
-                await tasks.add_task(
-                    HistoryTask(
-                        bot=self,
-                        chat_id=chat_id,
-                        start_id=comment.min_message_id,
-                        end_id=0,
-                    )
-                )
+                await tasks.add_task(HistoryTask(bot=self, chat_id=chat_id, start_id=comment.min_message_id, end_id=0))
 
     async def get_chat_members_count_with_cache(self, chat_id: int | str) -> int:
         if chat_id in self.members_count_cache:

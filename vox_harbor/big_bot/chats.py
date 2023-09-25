@@ -2,7 +2,7 @@ import asyncio
 import datetime
 import logging
 
-from pyrogram import enums
+from pyrogram import enums, types
 
 import vox_harbor.big_bot
 from vox_harbor.big_bot import structures
@@ -23,6 +23,14 @@ class ChatsManager:
 
         self.known_chats: dict[int, structures.Chat] = {}
 
+    @staticmethod
+    def get_chat_type(chat: types.Chat):
+        if chat.type == enums.ChatType.CHANNEL:
+            return structures.Chat.Type.CHANNEL
+        if chat.type == enums.ChatType.PRIVATE:
+            return structures.Chat.Type.PRIVATE
+        return structures.Chat.Type.CHAT
+
     async def register_new_chat(self, bot_index: int, chat_id: int, join_string: str = ''):
         self.logger.info('registering new chat (%s, %s) for bot %s', chat_id, join_string, bot_index)
         bot = self.bots[bot_index]
@@ -38,7 +46,7 @@ class ChatsManager:
                 shard=config.SHARD_NUM,
                 bot_index=bot_index,
                 added=datetime.datetime.utcnow().timestamp(),
-                type=structures.Chat.Type.CHANNEL if chat.type == enums.ChatType.CHANNEL else structures.Chat.Type.CHAT,
+                type=self.get_chat_type(chat),
             )
 
             session.set_settings(dict(async_insert=True))

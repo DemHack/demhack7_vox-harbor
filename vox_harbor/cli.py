@@ -1,13 +1,15 @@
-from typing import Any
-
+import asyncio
 import fire
+import typing as tp
 
-from vox_harbor.common.config import override_config
+from vox_harbor.big_bot.main import big_bots_main
+from vox_harbor.common.config import override_config, config
+from vox_harbor.common.db_utils import with_clickhouse
+from vox_harbor.common.logging_utils import clickhouse_logger
+from vox_harbor.services.controller import main as controller_main
 
-# todo from ... import controller and shard
 
-
-def _cli(service: str, **cfg: Any) -> None:
+def _cli(service: str, **cfg: tp.Any) -> None:
     """
     Vox Harbor
 
@@ -17,11 +19,11 @@ def _cli(service: str, **cfg: Any) -> None:
     """
     match service.split('-'):
         case ['c' | 'controller']:
-            service_main = 'controller.main'  # todo
+            task = controller_main
             prefix = 'controller_'
 
         case ['s' | 'shard', shard_num] if shard_num.isdigit():
-            service_main = 'shard.main'  # todo
+            task = big_bots_main
             prefix = 'shard_'
             cfg['shard_num'] = int(shard_num)
 
@@ -33,7 +35,23 @@ def _cli(service: str, **cfg: Any) -> None:
             cfg[prefix + var] = cfg.pop(var)
 
     override_config(cfg)
-    # todo service_main()
+    asyncio.run(_main(task))
+
+
+async def _main(task: tp.Callable):
+    async with with_clickhouse(
+        host=config.CLICKHOUSE_HOST,
+        port=config.CLICKHOUSE_PORT,
+        database='default',
+        user='default',
+        password=config.CLICKHOUSE_PASSWORD,
+        secure=True,
+        echo=False,
+        minsize=10,
+        maxsize=50,
+    ):
+        async with clickhouse_logger():
+            await task()
 
 
 def main():

@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import datetime
 import logging
 import socket
@@ -49,3 +50,20 @@ class ClickHouseHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         self.queue.put_nowait(record)
+
+
+@contextlib.asynccontextmanager
+async def clickhouse_logger():
+    handler = ClickHouseHandler()
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s %(levelname)6s - %(name)s - %(message)s',
+        handlers=[handler, logging.StreamHandler()],
+    )
+
+    try:
+        handler.start()
+        yield
+    finally:
+        await handler.batch_flush()

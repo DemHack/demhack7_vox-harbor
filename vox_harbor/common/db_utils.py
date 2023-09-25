@@ -1,16 +1,29 @@
 import contextlib
+import logging
 import typing as tp
 from operator import attrgetter
 
 import asynch
 import pydantic
-from asynch.cursors import DictCursor
+from asynch.cursors import DictCursor as _DictCursor
 from asynch.pool import Pool
 
 from vox_harbor.big_bot import structures
+from vox_harbor.common.config import config
 from vox_harbor.common.exceptions import NotFoundError
 
 pool: Pool | None = None
+
+
+class DictCursor(_DictCursor):
+    logger = logging.getLogger('vox_harbor.common.db_utils.cursor')
+
+    async def execute(self, query: str, *args, **kwargs):
+        if config.READ_ONLY and query.upper().startswith('INSERT'):
+            self.logger.warning('read only session, query %s will be ignored', query)
+            return
+
+        return await super().execute(query, *args, **kwargs)
 
 
 @contextlib.asynccontextmanager

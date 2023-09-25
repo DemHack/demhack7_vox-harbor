@@ -34,6 +34,7 @@ class Chat(_Base):
     class Type(enum.StrEnum):
         CHAT = 'CHAT'
         CHANNEL = 'CHANNEL'
+        PRIVATE = 'PRIVATE'
 
     id: int
     name: str
