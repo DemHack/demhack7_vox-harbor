@@ -144,7 +144,9 @@ class Bot(Client):
                 return
 
             if chat.id in self._subscribed_chats:
-                self.logger.info('this chat is already handled by another bot (%s), index=%s, leaving', known_chat, self.index)
+                self.logger.info(
+                    'this chat is already handled by another bot (%s), index=%s, leaving', known_chat, self.index
+                )
                 try:
                     await self.leave_chat(chat.id)
                 except Exception as e:
@@ -222,6 +224,8 @@ class BotManager:
     lock = asyncio.Lock()
 
     def __init__(self, bots: list[Bot]):
+        self.started: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
+
         self.bots = bots
 
         self._discover_cache = cachetools.TTLCache(maxsize=500, ttl=60)
@@ -235,6 +239,7 @@ class BotManager:
     async def start(self):
         for bot in self.bots:
             await bot.start()
+        self.started.set_result(True)
 
     async def stop(self):
         for bot in self.bots:

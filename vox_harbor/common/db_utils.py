@@ -1,6 +1,7 @@
 import contextlib
 import logging
 import typing as tp
+from functools import partial
 from operator import attrgetter
 
 import asynch
@@ -46,6 +47,20 @@ async def session_scope(cursor_type=DictCursor) -> DictCursor:
     async with pool.acquire() as conn:
         async with conn.cursor(cursor_type) as cursor:
             yield cursor
+
+
+clickhouse_default = partial(
+    with_clickhouse,
+    host=config.CLICKHOUSE_HOST,
+    port=config.CLICKHOUSE_PORT,
+    database='default',
+    user='default',
+    password=config.CLICKHOUSE_PASSWORD,
+    secure=True,
+    echo=False,
+    minsize=10,
+    maxsize=50,
+)
 
 
 async def db_fetchone(
@@ -94,3 +109,8 @@ async def db_fetchall(
 def rows_to_unique_column(rows: tp.Iterable[pydantic.BaseModel], column: str) -> list[tp.Any]:
     """Extract unique values from a column in an iterable of database rows."""
     return list(dict.fromkeys(map(attrgetter(column), rows)).keys())
+
+
+async def db_execute(query: str, query_args: tp.Optional[dict[str, tp.Any]] = None) -> None:
+    async with session_scope() as session:
+        await session.execute(query, query_args)

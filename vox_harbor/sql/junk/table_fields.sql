@@ -10,6 +10,11 @@ SELECT 'broken_bots';
 SHOW COLUMNS
 FROM broken_bots;
 
+SELECT 'bots_dev_1';
+
+SHOW COLUMNS
+FROM bots_dev_1;
+
 SELECT 'chat_updates';
 
 SHOW COLUMNS

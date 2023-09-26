@@ -1,17 +1,25 @@
 import asyncio
-import typing as tp
-import uvicorn
-from collections import defaultdict
+import logging
 from itertools import chain, groupby
 from operator import attrgetter
 from typing import Iterable
 
+import fastapi
+import uvicorn
 from fastapi import APIRouter
 
+from tests.testing_data import USER
 from vox_harbor.big_bot.structures import Comment, Message, User, UserInfo
 from vox_harbor.common.config import config
-from vox_harbor.common.db_utils import db_fetchall, rows_to_unique_column
+from vox_harbor.common.db_utils import (
+    clickhouse_default,
+    db_execute,
+    db_fetchall,
+    rows_to_unique_column,
+)
 from vox_harbor.common.exceptions import NotFoundError
+
+logger = logging.getLogger('vox_harbor.big_bot.services.controller')
 
 controller = APIRouter()
 
@@ -19,11 +27,21 @@ controller = APIRouter()
 @controller.get('/user')
 async def get_user(user_id: int) -> UserInfo:
     """Web UI (consumer)"""
-    return _users_to_user_info(await _get_sorted_users_by_user_ids(user_ids=[user_id]))
+    return _users_to_user_info(await _get_users_by_user_ids(user_ids=[user_id]))
+
+
+@controller.get('/user_by_msg_link')
+async def get_user_by_msg_link(msg_link: str) -> UserInfo:
+    """Web UI (consumer)"""
+    user_id = USER.user_id
+
+    # todo
+
+    return await get_user(user_id=user_id)
 
 
 @controller.get('/users')
-async def get_users(username: str, limit: int = 10) -> dict[str, list[UserInfo]]:
+async def get_users(username: str, limit: int = 10) -> list[UserInfo]:
     """Web UI (consumer)"""
     username_query = """--sql
         SELECT *
@@ -41,19 +59,10 @@ async def get_users(username: str, limit: int = 10) -> dict[str, list[UserInfo]]
 
     all_user_ids = chain.from_iterable(username_to_user_ids.values())
 
-    users_info: list[UserInfo] = _users_to_users_info(await _get_sorted_users_by_user_ids(all_user_ids))
-    id_to_info: dict[int, UserInfo] = {ui.user_id: ui for ui in users_info}
-
-    username_to_users_info: dict[str, list[UserInfo]] = defaultdict(list)
-
-    for username, user_ids in username_to_user_ids.items():
-        for user_id in user_ids:
-            username_to_users_info[username].append(id_to_info[user_id])
-
-    return username_to_users_info
+    return _users_to_users_info(await _get_users_by_user_ids(all_user_ids))
 
 
-async def _get_sorted_users_by_user_ids(user_ids: Iterable[int]):
+async def _get_users_by_user_ids(user_ids: Iterable[int]):
     user_ids = list(user_ids)
 
     query = f"""--sql
@@ -71,7 +80,7 @@ def _users_to_user_info(user_rows: list[User]) -> UserInfo:
 def _users_to_users_info(users_rows: list[User]) -> list[UserInfo]:
     users_info: list[UserInfo] = []
 
-    for user_id, user_rows_iter in groupby(users_rows, attrgetter('user_id')):  # todo groupby_attr
+    for user_id, user_rows_iter in groupby(users_rows, attrgetter('user_id')):
         user_rows = list(user_rows_iter)
         usernames = rows_to_unique_column(user_rows, 'username')
         names = rows_to_unique_column(user_rows, 'name')
@@ -102,6 +111,9 @@ async def get_comments(user_id: int) -> list[Comment]:
 @controller.post('/messages')
 async def get_messages(comments: list[Comment]) -> list[Message]:
     """Web UI (consumer)"""
+
+    logger.debug('get_messages received comments: %s', comments)
+
     if not (messages := await _get_messages(comments)):
         raise NotFoundError('messages')
     return messages
@@ -137,10 +149,30 @@ async def add_bot(name: str, session_string: str) -> None:
 @controller.post('/remove_bot')
 async def remove_bot(bot_id: int) -> None:
     """Web UI (admin)"""
-    # todo
+    query = """--sql
+        INSERT INTO test_broken_bots (*)
+        VALUES (%(bot_id)s)
+    """  # todo remove prefix test_
+
+    await db_execute(query, dict(bot_id=bot_id))
 
 
-def main() -> tp.Awaitable:
-    server_config = uvicorn.Config(controller, host=config.CONTROLLER_HOST, port=config.CONTROLLER_PORT, log_config=None)
+def main():
+    server_config = uvicorn.Config(
+        controller, host=config.CONTROLLER_HOST, port=config.CONTROLLER_PORT, log_config=None
+    )
     server = uvicorn.Server(server_config)
     return server.serve()
+
+
+async def _dev_main() -> None:
+    controller_app = fastapi.FastAPI()
+    controller_app.include_router(controller, prefix='/api/controller')
+
+    async with clickhouse_default():
+        server_config = uvicorn.Config(controller_app, host=config.CONTROLLER_HOST, port=config.CONTROLLER_PORT)
+        await uvicorn.Server(server_config).serve()
+
+
+if __name__ == '__main__':
+    asyncio.run(_dev_main())

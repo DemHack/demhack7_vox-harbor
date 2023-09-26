@@ -1,7 +1,8 @@
 import datetime
 import enum
-import pydantic
 import typing as tp
+
+import pydantic
 
 
 def model_to_tuple(pydantic_obj: pydantic.BaseModel) -> tuple[tp.Any, ...]:
@@ -76,6 +77,9 @@ class Comment(_Base):
         to_tuple: tp.Callable[[tp.Self], tuple[int, ...]] = lambda c: (c.shard, c.bot_index, c.chat_id)
         return to_tuple(self) < to_tuple(other)
 
+    def __eq__(self, other: tp.Self):
+        return vars(self) == vars(other)
+
 
 class CommentRange(_Base):
     chat_id: int
@@ -86,6 +90,9 @@ class CommentRange(_Base):
 class Message(pydantic.BaseModel):
     text: str | None
     comment: Comment
+
+    def __eq__(self, other: tp.Self):
+        return self.text == other.text and self.comment == other.comment
 
 
 class User(_Base):
@@ -98,6 +105,13 @@ class UserInfo(_Base):
     user_id: int
     usernames: list[str]
     names: list[str]
+
+    def __eq__(self, other: tp.Self):
+        return (
+            self.user_id == other.user_id
+            and set(self.usernames) == set(other.usernames)
+            and set(self.names) == set(other.names)
+        )
 
 
 class Log(_Base):
@@ -129,19 +143,3 @@ class Post(NewPost):
 
 class DiscoverRequest(_Base):
     join_string: str
-
-
-class ShardLoad(pydantic.BaseModel):
-    """
-    Args:
-        shard: Shard ID
-        known_chats: The sum of all chats known by bots on the shard
-        lazy_bot_index: The index of the bot with the least known chats
-    """
-
-    shard: int
-    known_chats: int
-    lazy_bot_index: int
-
-    def __lt__(self, other: tp.Self) -> bool:
-        return self.known_chats < other.known_chats

@@ -21,7 +21,7 @@ class _Config(pds.BaseSettings):
     CLICKHOUSE_PORT: int = 9440
     CLICKHOUSE_PASSWORD: str
 
-    CONTROLLER_HOST: str = '0.0.0.0'
+    CONTROLLER_HOST: str = '127.0.0.1'
     CONTROLLER_PORT: int = 8002
 
     SHARD_NUM: int = 0
@@ -37,14 +37,8 @@ class _Config(pds.BaseSettings):
     READ_ONLY: bool = False
 
     # noinspection PyPep8Naming
-    @classmethod
-    @pd.field_validator('MODE', mode='before')
-    def _1(cls, MODE: str) -> str:
-        return MODE.lower()
-
-    # noinspection PyPep8Naming
-    @classmethod
     @pd.field_validator('SHARD_ENDPOINTS', mode='before')
+    @classmethod
     def _2(cls, SHARD_ENDPOINTS: str) -> list[tuple[str, int]]:
         if not SHARD_ENDPOINTS:
             return []
@@ -65,15 +59,19 @@ class _Config(pds.BaseSettings):
 
     @shard_host.setter
     def shard_host(self, host: str) -> None:
-        self.SHARD_HOST = host
+        self.SHARD_HOST = host  # pyright: ignore
 
     @property
     def shard_port(self) -> int:
-        return self.SHARD_PORT or self.SHARD_ENDPOINTS[self.SHARD_NUM][1]
+        return self.SHARD_PORT or self.SHARD_ENDPOINTS[self.SHARD_NUM][1]  # pyright: ignore
 
     @shard_port.setter
     def shard_port(self, port: int) -> None:
-        self.SHARD_PORT = port
+        self.SHARD_PORT = port  # pyright: ignore
+
+    def shard_url(self, shard: int):
+        endpoint = self.SHARD_ENDPOINTS[shard]
+        return f'http://{endpoint[0]}:{endpoint[1]}'
 
 
 def override_config(cfg: dict[str, Any]) -> None:
