@@ -2,6 +2,7 @@ import asyncio
 import collections
 import datetime
 import logging
+import cachetools
 
 from pyrogram import enums, raw, types, utils
 
@@ -13,6 +14,9 @@ from vox_harbor.common.db_utils import session_scope
 from vox_harbor.common.exceptions import format_exception
 
 logger = logging.getLogger('vox_harbor.handlers')
+
+
+media_cache = cachetools.TTLCache(maxsize=10_000, ttl=300)
 
 
 class BlockInserter:
@@ -152,6 +156,13 @@ async def process_message(bot: 'vox_harbor.big_bot.bots.Bot', message: types.Mes
     if message.chat.id not in await bot.get_subscribed_chats():
         logger.info('durov moment for chat %s bot %s', message.chat.id, bot.index)
         return
+
+    if message.media_group_id:
+        if message.media_group_id in media_cache:
+            logger.info('another durov moment, %s %s', message.chat.id, message.media_group_id)
+            return
+
+        media_cache[message.media_group_id] = True
 
     chats = await ChatsManager.get_instance()
 
