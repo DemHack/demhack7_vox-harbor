@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import logging
 import random
 from typing import Iterable
@@ -19,6 +20,8 @@ from vox_harbor.common.exceptions import format_exception
 
 
 class Bot(Client):
+    INTERVAL = 60
+
     def __init__(self, *args, bot_index, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -26,6 +29,7 @@ class Bot(Client):
 
         self._invites_callback: dict[str, asyncio.Future[int]] = {}
         self._subscribed_chats: set[int] = set()
+        self._subscribed_chats_last_updated = 0
 
         self.logger = logging.getLogger(f'vox_harbor.big_bot.bots.bot.{bot_index}')
 
@@ -48,10 +52,14 @@ class Bot(Client):
             new_chats.add(dialog.chat.id)
 
         self._subscribed_chats = new_chats
+        self._subscribed_chats_last_updated = datetime.datetime.now().timestamp()
         return self._subscribed_chats
 
     async def get_subscribed_chats(self):
-        if not self._subscribed_chats:
+        if (
+            not self._subscribed_chats
+            or datetime.datetime.now().timestamp() - self._subscribed_chats_last_updated > self.INTERVAL
+        ):
             await self.update_subscribed_chats()
 
         return self._subscribed_chats

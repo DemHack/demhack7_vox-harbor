@@ -27,6 +27,10 @@ def _cli(service: str, **cfg: tp.Any) -> None:
             prefix = 'shard_'
             cfg['shard_num'] = int(shard_num)
 
+        case ['s' | 'shard']:
+            task = big_bots_main
+            prefix = 'shard_'
+
         case _:
             raise ValueError(f'Invalid service: {service}')
 

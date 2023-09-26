@@ -42,8 +42,9 @@ class ClickHouseHandler(logging.Handler):
 
     async def loop(self):
         while True:
-            await asyncio.sleep(self.INTERVAL)
-            await self.batch_flush()
+            with contextlib.suppress(Exception):
+                await asyncio.sleep(self.INTERVAL)
+                await self.batch_flush()
 
     def start(self):
         asyncio.create_task(self.loop())

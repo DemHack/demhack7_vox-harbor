@@ -79,6 +79,9 @@ class HistoryTask(Task):
         self.current_offset = start_id
         self._finished = False
 
+        self.skips_count = 0
+        self.max_skips_count = 3
+
     @property
     def total(self):
         return self.start - self.end
@@ -86,8 +89,16 @@ class HistoryTask(Task):
     async def step(self):
         messages = await self.bot.get_history(self.chat_id, self.current_offset, self.end, self.limit)
         if not messages:
-            self._finished = True
+            self.skips_count += 1
+            if self.skips_count > self.max_skips_count:
+                self._finished = True
+                self.logger.info('no messages for %s times, finishing block %s', self.skips_count, self.id)
+            else:
+                self.current_offset -= self.limit
+                self.logger.info('no messages in block %s', self.id)
             return
+
+        self.skips_count = 0
 
         if not self.start:
             self.start = messages[0].id
@@ -133,19 +144,23 @@ class TaskManager:
 
     async def loop(self):
         while True:
-            if not self.tasks:
+            try:
+                if not self.tasks:
+                    await asyncio.sleep(10)
+
+                while self.tasks:
+                    await asyncio.gather(*(
+                        task.do_step()
+                        for task in self.tasks.values()
+                    ))
+
+                    self.logger.info(self.tasks)
+                    for task in self.tasks.copy().values():
+                        if task.done:
+                            del self.tasks[task.id]
+            except Exception as e:
+                self.logger.error('failed in task manager loop: %s', format_exception(e, with_traceback=True))
                 await asyncio.sleep(10)
-
-            while self.tasks:
-                await asyncio.gather(*(
-                    task.do_step()
-                    for task in self.tasks.values()
-                ))
-
-                self.logger.info(self.tasks)
-                for task in self.tasks.copy().values():
-                    if task.done:
-                        del self.tasks[task.id]
 
     def start(self):
         asyncio.create_task(self.loop())

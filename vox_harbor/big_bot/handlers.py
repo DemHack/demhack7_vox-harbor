@@ -1,4 +1,5 @@
 import asyncio
+import collections
 import datetime
 import logging
 
@@ -9,18 +10,20 @@ from vox_harbor.big_bot import structures
 from vox_harbor.big_bot.chats import ChatsManager
 from vox_harbor.common.config import config
 from vox_harbor.common.db_utils import session_scope
+from vox_harbor.common.exceptions import format_exception
 
 logger = logging.getLogger('vox_harbor.handlers')
 
 
 class BlockInserter:
     BLOCK_SIZE = 10000
-    BLOCK_TTL = 5
+    BLOCK_TTL = 10
 
     def __init__(self):
         self.comments = []
         self.users = []
         self.chats = []
+        self.posts = []
 
         self.lock = asyncio.Lock()
         self.last_flush = datetime.datetime.now()
@@ -30,23 +33,37 @@ class BlockInserter:
             block_comments = self.comments.copy()
             block_users = self.users.copy()
             block_chats = self.chats.copy()
+            block_posts = self.posts.copy()
             self.comments.clear()
             self.users.clear()
             self.chats.clear()
+            self.posts.clear()
 
         async with session_scope() as session:
             count = len(block_comments)
-            session.set_settings({'async_insert': True})
-            await session.execute('INSERT INTO comments VALUES', block_comments)
-            await session.execute('INSERT INTO users VALUES', block_users)
-            await session.execute('INSERT INTO discovered_chats VALUES', block_chats)
+            session.set_settings(dict(async_insert=True))
+            if block_comments:
+                await session.execute('INSERT INTO comments VALUES', block_comments)
+
+            if block_users:
+                await session.execute('INSERT INTO users VALUES', block_users)
+
+            if block_chats:
+                await session.execute('INSERT INTO discovered_chats VALUES', block_chats)
+
+            if block_posts:
+                await session.execute('INSERT INTO posts VALUES', block_posts)
+
             self.last_flush = datetime.datetime.now()
             logger.info('flushed %s records', count)
 
     async def loop(self):
         while True:
-            await self.flush()
-            await asyncio.sleep(self.BLOCK_TTL)
+            try:
+                await self.flush()
+                await asyncio.sleep(self.BLOCK_TTL)
+            except Exception as e:
+                logger.error('failed to flush a block: %s', format_exception(e, with_traceback=True))
 
     def start(self):
         asyncio.create_task(self.loop())
@@ -87,8 +104,55 @@ class BlockInserter:
                 ).model_dump()
             )
 
+    async def insert_post(self, post: types.Message, bot_index: int):
+        data = collections.defaultdict(int)
+        data['@views'] = post.views or 0
+
+        if post.reactions is not None:
+            # noinspection PyUnresolvedReferences
+            for reaction in post.reactions.reactions:  # reactions.reactions ??? thank you, pyrogram
+                if reaction.emoji:
+                    data[reaction.emoji] += reaction.count
+
+                elif reaction.custom_emoji_id:
+                    data[f'@custom_emoji_{reaction.custom_emoji_id}'] += reaction.count
+
+        if post.poll:
+            if not post.poll.chosen_option_id:
+                if post.poll.is_anonymous and not post.poll.is_closed:
+                    try:
+                        logger.info('voting for the first time (%s, %s)', post.chat.id, post.id)
+                        await post.vote(0)
+                    except Exception as e:
+                        logger.error('voting failed: %s', format_exception(e, with_traceback=True))
+                return
+
+            for option in post.poll.options:
+                data[f'@option_{option.text}'] = option.voter_count
+
+        async with self.lock:
+            post_json = structures.Post(
+                id=post.id,
+                channel_id=post.chat.id,
+                post_date=post.date.astimezone(datetime.timezone.utc),
+                bot_index=bot_index,
+                shard=config.SHARD_NUM,
+                point_date=datetime.datetime.utcnow(),
+                keys=list(data.keys()),
+                values=list(data.values()),
+            ).model_dump()
+
+            post_json['data.key'] = post_json.pop('keys')
+            post_json['data.value'] = post_json.pop('values')
+
+            self.posts.append(post_json)
+
 
 async def process_message(bot: 'vox_harbor.big_bot.bots.Bot', message: types.Message):
+    if message.chat.id not in await bot.get_subscribed_chats():
+        logger.info('durov moment for chat %s bot %s', message.chat.id, bot.index)
+        return
+
     chats = await ChatsManager.get_instance()
 
     # This will handle scenario if our bot were added to the chat by another user
@@ -113,7 +177,9 @@ async def process_message(bot: 'vox_harbor.big_bot.bots.Bot', message: types.Mes
             await inserter.insert_chat(chat)
 
     if message.chat.type == enums.ChatType.CHANNEL:
-        # todo: here will be reactions statistic
+        if datetime.datetime.now() - message.date < datetime.timedelta(weeks=1):
+            await inserter.insert_post(message, bot.index)
+
         return
 
     channel_id = None

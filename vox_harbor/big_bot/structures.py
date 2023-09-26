@@ -112,6 +112,21 @@ class Log(_Base):
     fqdn: str
 
 
+class NewPost(_Base):
+    id: int
+    channel_id: int
+    post_date: datetime.datetime
+
+    bot_index: int
+    shard: int
+
+
+class Post(NewPost):
+    point_date: datetime.datetime
+    keys: list[str]
+    values: list[int]
+
+
 class DiscoverRequest(_Base):
     join_string: str
 
