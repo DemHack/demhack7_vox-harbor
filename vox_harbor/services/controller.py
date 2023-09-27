@@ -1,13 +1,12 @@
 import asyncio
 import logging
+import typing as tp
 from itertools import chain, groupby
 from operator import attrgetter
-from typing import Iterable
 
 import uvicorn
 from fastapi import FastAPI
 
-from tests.testing_data import USER
 from vox_harbor.big_bot.structures import Comment, Message, User, UserInfo
 from vox_harbor.common.config import config
 from vox_harbor.common.db_utils import (
@@ -33,11 +32,11 @@ async def get_user(user_id: int) -> UserInfo:
 @controller.get('/user_by_msg_link')
 async def get_user_by_msg_link(msg_link: str) -> UserInfo:
     """Web UI (consumer)"""
-    user_id = USER.user_id
+    # user_id = USER.user_id
 
     # todo
 
-    return await get_user(user_id=user_id)
+    # return await get_user(user_id=user_id)
 
 
 @controller.get('/users')
@@ -62,7 +61,7 @@ async def get_users(username: str, limit: int = 10) -> list[UserInfo]:
     return _users_to_users_info(await _get_users_by_user_ids(all_user_ids))
 
 
-async def _get_users_by_user_ids(user_ids: Iterable[int]):
+async def _get_users_by_user_ids(user_ids: tp.Iterable[int]):
     user_ids = list(user_ids)
 
     query = f"""--sql
@@ -90,12 +89,12 @@ def _users_to_users_info(users_rows: list[User]) -> list[UserInfo]:
 
 
 @controller.get('/messages_by_user_id')
-async def get_messages_by_user_id(user_id: int) -> list[Message]:
-    return await get_messages(await get_comments(user_id))
+async def get_messages_by_user_id(user_id: int, limit: int = 10) -> list[Message]:
+    return await get_messages(await get_comments(user_id, limit))
 
 
 @controller.get('/comments')
-async def get_comments(user_id: int) -> list[Comment]:
+async def get_comments(user_id: int, limit: int = -1) -> list[Comment]:
     """Web UI (consumer). Use with get_messages."""
     query = """--sql
         SELECT *
@@ -103,6 +102,10 @@ async def get_comments(user_id: int) -> list[Comment]:
         WHERE user_id = %(user_id)s 
         ORDER BY date
     """
+
+    if limit > 0:
+        query += f'LIMIT {limit}'
+
     return await db_fetchall(Comment, query, dict(user_id=user_id), name='messages')
 
 
@@ -120,11 +123,17 @@ async def get_messages(comments: list[Comment]) -> list[Message]:
 async def _get_messages(comments: list[Comment]) -> list[Message]:
     sorted_comments = sorted(comments)
     messages: list[Message] = []
+    tasks: list[tp.Awaitable] = []
+
+    async def _do_request(_shard: int, _comments_by_shard: list[Comment]):
+        async with ShardClient(_shard) as shard_client:
+            messages.extend(await shard_client.get_messages(_comments_by_shard))
 
     for shard, comments_by_shard in groupby(sorted_comments, attrgetter('shard')):
-        async with ShardClient(shard) as shard_client:
-            messages += await shard_client.get_messages(comments_by_shard)
+        tasks.append(_do_request(shard, list(comments_by_shard)))
+    await asyncio.gather(*tasks)
 
+    messages.sort(key=lambda m: m.comment.date)
     return messages
 
 
@@ -132,11 +141,16 @@ async def _get_messages(comments: list[Comment]) -> list[Message]:
 async def discover(join_string: str) -> None:
     """Web UI (consumer)"""
     shards_chats_count: list[int] = []
+    tasks: list[tp.Awaitable] = []
+
+    async def _do_request(_shard: int):
+        async with ShardClient(_shard) as _shard_client:
+            shards_chats_count.append(await _shard_client.get_known_chats_count())
 
     for shard in range(len(config.SHARD_ENDPOINTS)):
-        async with ShardClient(shard) as shard_client:
-            shards_chats_count.append(await shard_client.get_known_chats_count())
+        tasks.append(_do_request(shard))
 
+    await asyncio.gather(*tasks)
     lazy_shard = shards_chats_count.index(min(shards_chats_count))
 
     async with ShardClient(lazy_shard) as shard_client:

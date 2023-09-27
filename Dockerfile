@@ -11,4 +11,4 @@ WORKDIR /vox_harbor
 RUN python3 -m pip install -r requirements.txt
 EXPOSE 8002
 
-CMD ["python3", "main.py", "shard"]
+ENTRYPOINT ["python3", "main.py"]

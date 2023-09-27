@@ -11,18 +11,13 @@ class ShardClient(httpx.AsyncClient):
         kwargs['base_url'] = config.shard_url(shard)
         super().__init__(**kwargs)
 
-    def _concat_url(self, postfix: str) -> str:
-        return str(self.base_url) + postfix
-
     async def get_messages(self, sorted_comments: Iterable[Comment]) -> list[Message]:
-        url = self._concat_url('/messages')
         json: list[dict[str, Any]] = [c.model_dump(mode='json') for c in sorted_comments]
-        return [Message(**m) for m in (await self.post(url, json=json)).json()]
+        messages = (await self.post('/messages', json=json)).json()
+        return [Message.model_validate(m) for m in messages]
 
     async def get_known_chats_count(self) -> int:
-        url = self._concat_url('/known_chats_count')
-        return (await self.get(url)).json()
+        return (await self.get('/known_chats_count')).json()
 
-    async def discover(self, join_string: str) -> httpx.Response:
-        url = self._concat_url('/discover')
-        return await self.post(url, params=dict(join_string=join_string))
+    async def discover(self, join_string: str) -> None:
+        await self.post('/discover', params=dict(join_string=join_string))

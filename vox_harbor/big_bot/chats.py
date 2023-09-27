@@ -70,8 +70,10 @@ class ChatsManager:
 
         for chat in chats:
             for i, bot in enumerate(self.bots):
-                if chat.id in await bot.get_subscribed_chats() and (
-                    chat.shard != config.SHARD_NUM or chat.bot_index != i
+                if (
+                    chat.id in await bot.get_subscribed_chats()
+                    and (chat.shard != config.SHARD_NUM or chat.bot_index != i)
+                    and chat.type != structures.Chat.Type.PRIVATE
                 ):
                     # Wrong bot index or shard
                     try:

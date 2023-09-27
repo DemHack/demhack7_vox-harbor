@@ -14,7 +14,7 @@ from vox_harbor.common.db_utils import session_scope
 from vox_harbor.common.exceptions import format_exception
 
 logger = logging.getLogger('vox_harbor.handlers')
-
+lock = asyncio.Lock()
 
 media_cache = cachetools.TTLCache(maxsize=10_000, ttl=300)
 
@@ -157,13 +157,6 @@ async def process_message(bot: 'vox_harbor.big_bot.bots.Bot', message: types.Mes
         logger.info('durov moment for chat %s bot %s', message.chat.id, bot.index)
         return
 
-    if message.media_group_id:
-        if message.media_group_id in media_cache:
-            logger.info('another durov moment, %s %s', message.chat.id, message.media_group_id)
-            return
-
-        media_cache[message.media_group_id] = True
-
     chats = await ChatsManager.get_instance()
 
     # This will handle scenario if our bot were added to the chat by another user
@@ -187,9 +180,26 @@ async def process_message(bot: 'vox_harbor.big_bot.bots.Bot', message: types.Mes
         ):
             await inserter.insert_chat(chat)
 
-    if message.chat.type == enums.ChatType.CHANNEL:
-        if datetime.datetime.now() - message.date < datetime.timedelta(weeks=1):
-            await inserter.insert_post(message, bot.index)
+    if (
+        message.chat.type == enums.ChatType.CHANNEL
+        and datetime.datetime.now() - message.date < datetime.timedelta(weeks=1)
+    ):
+        if message.media_group_id:
+            async with lock:
+                if message.media_group_id not in media_cache or media_cache[message.media_group_id] > message.id:
+                    media_cache[message.media_group_id] = message.id
+
+            await asyncio.sleep(0.3)
+            if media_cache[message.media_group_id] != message.id:
+                logger.info(
+                    'another durov moment in chat %s. Our message id %s, the lowest message id in group %s',
+                    message.chat.id,
+                    message.id,
+                    media_cache[message.media_group_id],
+                )
+                return
+
+        await inserter.insert_post(message, bot.index)
 
         return
 

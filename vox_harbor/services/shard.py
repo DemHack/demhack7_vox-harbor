@@ -5,8 +5,8 @@ from operator import attrgetter
 
 import uvicorn
 from fastapi import FastAPI
+from pyrogram import types
 
-from vox_harbor.big_bot import structures
 from vox_harbor.big_bot.bots import BotManager
 from vox_harbor.big_bot.structures import Comment, Message
 from vox_harbor.common.config import config
@@ -22,7 +22,7 @@ async def get_messages(sorted_comments: list[Comment]) -> list[Message]:
 
     for bot_index, comments_by_bot_index in groupby(sorted_comments, attrgetter('bot_index')):
         for chat_id, comments_by_chat_id in groupby(comments_by_bot_index, attrgetter('chat_id')):
-            message_ids = [msg.message_id for msg in comments_by_chat_id]
+            message_ids = [comment.message_id for comment in comments_by_chat_id]
             logger.debug('get_messages: bot_manager.get_messages args: %s', (bot_index, chat_id, message_ids))
             get_msgs = bot_manager.get_messages(bot_index, chat_id, message_ids)
             tasks.append(get_msgs)
@@ -32,7 +32,17 @@ async def get_messages(sorted_comments: list[Comment]) -> list[Message]:
     logger.debug('get_messages: pyrogram_messages: %s\n\n', pyrogram_messages)
 
     messages_zipped = zip(pyrogram_messages, sorted_comments, strict=True)
-    return [Message(text=msg.text, comment=cmt) for msg, cmt in messages_zipped]
+
+    msg: types.Message
+    return [
+        Message(
+            text=msg.text,
+            chat=msg.chat.title or ' '.join((msg.chat.first_name, msg.chat.last_name)),
+            comment=cmt
+        )
+        for msg, cmt in messages_zipped
+        if msg is not None and msg.chat is not None
+    ]
 
 
 @shard.get('/known_chats_count')

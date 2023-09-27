@@ -21,9 +21,9 @@ class PostManager:
     def _get_update_interval(post_date: datetime.datetime) -> int:
         delta = datetime.datetime.utcnow() - post_date
         if delta < datetime.timedelta(hours=1):
-            return 30
-        if delta < datetime.timedelta(hours=4):
             return 60
+        if delta < datetime.timedelta(hours=4):
+            return 120
         if delta < datetime.timedelta(days=1):
             return 600
 

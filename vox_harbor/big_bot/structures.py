@@ -89,6 +89,8 @@ class CommentRange(_Base):
 
 class Message(pydantic.BaseModel):
     text: str | None
+    chat: str | None = None
+
     comment: Comment
 
     def __eq__(self, other: tp.Self):
