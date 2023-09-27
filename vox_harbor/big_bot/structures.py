@@ -139,7 +139,3 @@ class Post(NewPost):
     point_date: datetime.datetime
     keys: list[str]
     values: list[int]
-
-
-class DiscoverRequest(_Base):
-    join_string: str

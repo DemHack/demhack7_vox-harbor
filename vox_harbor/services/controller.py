@@ -4,9 +4,8 @@ from itertools import chain, groupby
 from operator import attrgetter
 from typing import Iterable
 
-import fastapi
 import uvicorn
-from fastapi import APIRouter
+from fastapi import FastAPI
 
 from tests.testing_data import USER
 from vox_harbor.big_bot.structures import Comment, Message, User, UserInfo
@@ -18,10 +17,11 @@ from vox_harbor.common.db_utils import (
     rows_to_unique_column,
 )
 from vox_harbor.common.exceptions import NotFoundError
+from vox_harbor.services.shard_client import ShardClient
 
 logger = logging.getLogger('vox_harbor.big_bot.services.controller')
 
-controller = APIRouter()
+controller = FastAPI()
 
 
 @controller.get('/user')
@@ -97,8 +97,6 @@ async def get_messages_by_user_id(user_id: int) -> list[Message]:
 @controller.get('/comments')
 async def get_comments(user_id: int) -> list[Comment]:
     """Web UI (consumer). Use with get_messages."""
-    # todo later: offset - https://docs.pyrogram.org/api/methods/get_messages#get-messages
-
     query = """--sql
         SELECT *
         FROM comments
@@ -121,23 +119,28 @@ async def get_messages(comments: list[Comment]) -> list[Message]:
 
 async def _get_messages(comments: list[Comment]) -> list[Message]:
     sorted_comments = sorted(comments)
-    tasks = []
+    messages: list[Message] = []
 
     for shard, comments_by_shard in groupby(sorted_comments, attrgetter('shard')):
-        # todo get_msgs: httpx
-        # get_msgs = shard_service.get_messages(list(comments_by_shard))
-        # tasks.append(get_msgs)
-        ...
+        async with ShardClient(shard) as shard_client:
+            messages += await shard_client.get_messages(comments_by_shard)
 
-    return list(chain.from_iterable(await asyncio.gather(*tasks)))
+    return messages
 
 
 @controller.post('/discover')
 async def discover(join_string: str) -> None:
     """Web UI (consumer)"""
-    # todo discover: WebUI -> Controller <-> shards
-    # Controller -> shard with min known chats
-    ...
+    shards_chats_count: list[int] = []
+
+    for shard in range(len(config.SHARD_ENDPOINTS)):
+        async with ShardClient(shard) as shard_client:
+            shards_chats_count.append(await shard_client.get_known_chats_count())
+
+    lazy_shard = shards_chats_count.index(min(shards_chats_count))
+
+    async with ShardClient(lazy_shard) as shard_client:
+        await shard_client.discover(join_string)
 
 
 @controller.post('/add_bot')
@@ -166,11 +169,8 @@ def main():
 
 
 async def _dev_main() -> None:
-    controller_app = fastapi.FastAPI()
-    controller_app.include_router(controller, prefix='/api/controller')
-
     async with clickhouse_default():
-        server_config = uvicorn.Config(controller_app, host=config.CONTROLLER_HOST, port=config.CONTROLLER_PORT)
+        server_config = uvicorn.Config(controller, host=config.CONTROLLER_HOST, port=config.CONTROLLER_PORT)
         await uvicorn.Server(server_config).serve()
 
 

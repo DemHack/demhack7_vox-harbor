@@ -25,7 +25,6 @@ async def test_comments() -> None:
     assert is_sub_iterable(COMMENTS, await get_comments(USER.user_id))
 
 
-@pytest.mark.skip
 @pytest.mark.usefixtures("controller")
 @pytest.mark.asyncio_cooperative
 async def test_messages() -> None:

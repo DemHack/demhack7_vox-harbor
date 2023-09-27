@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import typing as tp
 from itertools import chain, groupby
 from operator import attrgetter
 
@@ -38,16 +37,30 @@ async def get_messages(sorted_comments: list[Comment]) -> list[Message]:
 
 @shard.get('/known_chats_count')
 async def get_known_chats_count() -> int:
-    ...  # todo
+    bots = await BotManager.get_instance(config.SHARD_NUM)
+
+    chats_count = 0
+    for bot in bots:
+        chats_count += len(await bot.get_subscribed_chats())
+
+    return chats_count
 
 
 @shard.post('/discover')
-async def discover(request: structures.DiscoverRequest) -> None:
+async def discover(join_string: str) -> None:
     bot_manager = await BotManager.get_instance(config.SHARD_NUM)
-    await bot_manager.discover_chat(request.join_string)
+    logger.info('discovering chat. join_string: %s', join_string)
+    await bot_manager.discover_chat(join_string)
 
 
-def main() -> tp.Awaitable:
+def main():
     server_config = uvicorn.Config(shard, host=config.shard_host, port=config.shard_port, log_config=None)
     server = uvicorn.Server(server_config)
     return server.serve()
+
+
+if __name__ == '__main__':
+    from vox_harbor.big_bot.main import big_bots_main
+    from vox_harbor.cli import _main  # type: ignore
+
+    asyncio.run(_main(big_bots_main))

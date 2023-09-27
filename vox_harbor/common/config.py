@@ -21,7 +21,7 @@ class _Config(pds.BaseSettings):
     CLICKHOUSE_PORT: int = 9440
     CLICKHOUSE_PASSWORD: str
 
-    CONTROLLER_HOST: str = '127.0.0.1'
+    CONTROLLER_HOST: str = '0.0.0.0'
     CONTROLLER_PORT: int = 8002
 
     SHARD_NUM: int = 0
