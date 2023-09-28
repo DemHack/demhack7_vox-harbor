@@ -6,6 +6,7 @@ from operator import attrgetter
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from vox_harbor.big_bot.structures import Comment, Message, User, UserInfo
 from vox_harbor.common.config import config
@@ -21,6 +22,13 @@ from vox_harbor.services.shard_client import ShardClient
 logger = logging.getLogger('vox_harbor.big_bot.services.controller')
 
 controller = FastAPI()
+controller.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'],
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
+)
 
 
 @controller.get('/user')
