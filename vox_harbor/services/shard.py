@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from pyrogram import types
 
 from vox_harbor.big_bot.bots import BotManager
-from vox_harbor.big_bot.structures import Comment, Message
+from vox_harbor.big_bot.structures import Comment, Message, User, EmptyResponse
 from vox_harbor.common.config import config
 
 shard = FastAPI()
@@ -61,6 +61,22 @@ async def discover(join_string: str, ignore_protection: bool = False) -> None:
     bot_manager = await BotManager.get_instance(config.SHARD_NUM)
     logger.info('discovering chat. join_string: %s', join_string)
     await bot_manager.discover_chat(join_string, ignore_protection=ignore_protection)
+
+
+@shard.get('/user_from_comment')
+async def get_user_from_comment(chat_id: int | str, message_id: int) -> User | EmptyResponse:
+    bot_manager = await BotManager.get_instance(config.SHARD_NUM)
+    bot = bot_manager[0]
+
+    message = await bot.get_messages(chat_id=chat_id, message_ids=message_id)
+    if message is None:
+        return EmptyResponse()
+
+    return User(
+        user_id=message.from_user.id,
+        username=message.from_user.username,
+        name=' '.join(filter(None, (message.from_user.first_name, message.from_user.last_name))),
+    )
 
 
 def main():

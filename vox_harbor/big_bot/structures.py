@@ -103,6 +103,10 @@ class User(_Base):
     name: str
 
 
+class EmptyResponse(_Base):
+    pass
+
+
 class UserInfo(_Base):
     user_id: int
     usernames: list[str]
