@@ -8,7 +8,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from vox_harbor.big_bot.structures import Comment, Message, User, UserInfo
+from vox_harbor.big_bot.structures import Comment, Message, Post, User, UserInfo
 from vox_harbor.common.config import config
 from vox_harbor.common.db_utils import (
     clickhouse_default,
@@ -180,6 +180,19 @@ async def remove_bot(bot_id: int) -> None:
     """  # todo remove prefix test_
 
     await db_execute(query, dict(bot_id=bot_id))
+
+
+@controller.get('/get_reactions')
+async def get_reactions(channel_id: int, post_id: int) -> list[Post]:
+    """Web UI"""
+    query = """--sql
+        SELECT *, data.key AS keys, data.value AS values
+        FROM posts
+        WHERE id = %(id)s AND channel_id = %(channel_id)s
+        ORDER BY point_date ASC
+    """
+
+    return await db_fetchall(Post, query, dict(id=post_id, channel_id=channel_id), 'Reactions')
 
 
 def main():
