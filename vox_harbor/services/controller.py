@@ -18,6 +18,7 @@ from vox_harbor.common.db_utils import (
     rows_to_unique_column,
 )
 from vox_harbor.common.exceptions import NotFoundError
+from vox_harbor.services.auto_discover import AutoDiscover
 from vox_harbor.services.shard_client import ShardClient
 
 logger = logging.getLogger('vox_harbor.big_bot.services.controller')
@@ -183,7 +184,6 @@ async def remove_bot(bot_id: int) -> None:
     await db_execute(query, dict(bot_id=bot_id))
 
 
-
 @controller.get('/get_chat')
 async def get_chat(chat_id: int) -> Chat:
     """Web UI"""
@@ -209,8 +209,10 @@ async def get_reactions(channel_id: int, post_id: int) -> list[Post]:
     return await db_fetchall(Post, query, dict(id=post_id, channel_id=channel_id), 'Reactions')
 
 
-
 def main():
+    auto_discover = AutoDiscover(discover)
+    auto_discover.start()
+
     server_config = uvicorn.Config(
         controller, host=config.CONTROLLER_HOST, port=config.CONTROLLER_PORT, log_config=None
     )

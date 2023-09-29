@@ -51,8 +51,8 @@ class DiscoveredChat(_Base):
     id: int
     name: str
     join_string: str
-    subscribers_count: int
-    sign: int
+    subscribers_count: int = 0
+    sign: int = 1
 
 
 class ChatUpdate(_Base):

@@ -64,7 +64,7 @@ class PostManager:
         new_posts = await db_fetchall(
             structures.NewPost,
             'SELECT * FROM new_posts_mv\n'
-            'WHERE post_date > now() - INTERVAL 7 DAY\n'
+            'WHERE post_date > now() - INTERVAL 3 DAY\n'
             'AND shard = %(shard)s',
             dict(shard=config.SHARD_NUM),
             raise_not_found=False,

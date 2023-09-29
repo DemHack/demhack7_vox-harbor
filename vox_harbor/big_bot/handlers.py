@@ -181,7 +181,7 @@ async def process_message(bot: 'vox_harbor.big_bot.bots.Bot', message: types.Mes
 
     if (
         message.chat.type == enums.ChatType.CHANNEL
-        and datetime.datetime.now() - message.date < datetime.timedelta(weeks=1)
+        and datetime.datetime.now() - message.date < datetime.timedelta(days=3)
     ):
         if message.media_group_id:
             async with lock:
