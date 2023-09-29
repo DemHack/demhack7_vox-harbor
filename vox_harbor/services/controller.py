@@ -17,7 +17,7 @@ from vox_harbor.common.db_utils import (
     db_fetchone,
     rows_to_unique_column,
 )
-from vox_harbor.common.exceptions import NotFoundError
+from vox_harbor.common.exceptions import BadRequestError, NotFoundError
 from vox_harbor.services.auto_discover import AutoDiscover
 from vox_harbor.services.shard_client import ShardClient
 
@@ -184,7 +184,7 @@ async def remove_bot(bot_id: int) -> None:
     await db_execute(query, dict(bot_id=bot_id))
 
 
-@controller.get('/get_chat')
+@controller.get('/chat')
 async def get_chat(chat_id: int) -> Chat:
     """Web UI"""
     query = """--sql
@@ -196,7 +196,7 @@ async def get_chat(chat_id: int) -> Chat:
     return await db_fetchone(Chat, query, dict(chat_id=chat_id))
 
 
-@controller.get('/get_reactions')
+@controller.get('/reactions')
 async def get_reactions(channel_id: int, post_id: int) -> list[Post]:
     """Web UI"""
     query = """--sql
@@ -207,6 +207,23 @@ async def get_reactions(channel_id: int, post_id: int) -> list[Post]:
     """
 
     return await db_fetchall(Post, query, dict(id=post_id, channel_id=channel_id), 'Reactions')
+
+
+@controller.get('/chats')
+async def get_chats(name: tp.Optional[str] = None, join_string: tp.Optional[str] = None) -> list[Chat]:
+    """Web UI"""
+    if not name and not join_string:
+        raise BadRequestError('Either name or join_string must be provided')
+
+    query = """--sql
+        SELECT *
+        FROM chats
+        WHERE name ILIKE %(name)s OR join_string ILIKE %(join_string)s 
+    """
+    name = name and name + '%'
+    join_string = join_string and join_string + '%'
+
+    return await db_fetchall(Chat, query, dict(name=name, join_string=join_string), 'Chats')
 
 
 def main():
