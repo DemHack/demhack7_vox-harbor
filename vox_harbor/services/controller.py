@@ -146,7 +146,7 @@ async def _get_messages(comments: list[Comment]) -> list[Message]:
 
 
 @controller.post('/discover')
-async def discover(join_string: str) -> None:
+async def discover(join_string: str, ignore_protection: bool = False) -> None:
     """Web UI (consumer)"""
     shards_chats_count: list[int] = []
     tasks: list[tp.Awaitable] = []
@@ -162,7 +162,7 @@ async def discover(join_string: str) -> None:
     lazy_shard = shards_chats_count.index(min(shards_chats_count))
 
     async with ShardClient(lazy_shard) as shard_client:
-        await shard_client.discover(join_string)
+        await shard_client.discover(join_string, ignore_protection)
 
 
 @controller.post('/add_bot')

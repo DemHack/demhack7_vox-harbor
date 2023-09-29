@@ -122,17 +122,16 @@ class BlockInserter:
                     data[f'@custom_emoji_{reaction.custom_emoji_id}'] += reaction.count
 
         if post.poll:
-            if not post.poll.chosen_option_id:
+            if post.poll.chosen_option_id is None:
                 if post.poll.is_anonymous and not post.poll.is_closed:
                     try:
                         logger.info('voting for the first time (%s, %s)', post.chat.id, post.id)
                         await post.vote(0)
                     except Exception as e:
                         logger.error('voting failed: %s', format_exception(e, with_traceback=True))
-                return
-
-            for option in post.poll.options:
-                data[f'@option_{option.text}'] = option.voter_count
+            else:
+                for option in post.poll.options:
+                    data[f'@option_{option.text}'] = option.voter_count
 
         async with self.lock:
             post_json = structures.Post(

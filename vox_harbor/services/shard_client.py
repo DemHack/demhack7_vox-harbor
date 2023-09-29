@@ -19,5 +19,5 @@ class ShardClient(httpx.AsyncClient):
     async def get_known_chats_count(self) -> int:
         return (await self.get('/known_chats_count')).json()
 
-    async def discover(self, join_string: str) -> None:
-        await self.post('/discover', params=dict(join_string=join_string))
+    async def discover(self, join_string: str, ignore_protection: bool = False) -> None:
+        await self.post('/discover', params=dict(join_string=join_string, ignore_protection=ignore_protection))

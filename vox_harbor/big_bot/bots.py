@@ -81,7 +81,13 @@ class Bot(Client):
         self._subscribed_chats.add(chat.id)
         return chat
 
-    async def discover_chat(self, join_string: str, with_linked: bool = True, join_no_check: bool = False):
+    async def discover_chat(
+        self,
+        join_string: str,
+        with_linked: bool = True,
+        join_no_check: bool = False,
+        ignore_protection: bool = False,
+    ):
         try:
             join_string = int(join_string)
         except ValueError:
@@ -94,13 +100,14 @@ class Bot(Client):
         preview = await self.get_chat(join_string)
         self.logger.info('chat title %s', preview.title)
 
-        if preview.type == enums.ChatType.CHANNEL and preview.members_count < config.MIN_CHANNEL_MEMBERS_COUNT:
-            self.logger.info('not enough members to join channel, skip')
-            return
+        if not ignore_protection:
+            if preview.type == enums.ChatType.CHANNEL and preview.members_count < config.MIN_CHANNEL_MEMBERS_COUNT:
+                self.logger.info('not enough members to join channel, skip')
+                return
 
-        elif preview.type != enums.ChatType.CHANNEL and preview.members_count < config.MIN_CHAT_MEMBERS_COUNT:
-            self.logger.info('not enough members to join chat, skip')
-            return
+            elif preview.type != enums.ChatType.CHANNEL and preview.members_count < config.MIN_CHAT_MEMBERS_COUNT:
+                self.logger.info('not enough members to join chat, skip')
+                return
 
         if isinstance(preview, types.Chat):
             chat = preview
@@ -129,7 +136,7 @@ class Bot(Client):
             await self.try_join_discovered_chat(chat, str(join_string))
             if with_linked and chat.linked_chat:
                 linked_join_string = chat.linked_chat.username or str(chat.linked_chat.id)
-                await self.discover_chat(linked_join_string, with_linked=False)
+                await self.discover_chat(linked_join_string, with_linked=False, ignore_protection=ignore_protection)
 
     async def try_join_discovered_chat(self, chat: types.Chat, join_string: str):
         if chat.id == 777000:
@@ -253,7 +260,7 @@ class BotManager:
         for bot in self.bots:
             await bot.update_subscribed_chats()
 
-    async def discover_chat(self, join_string: str):
+    async def discover_chat(self, join_string: str, ignore_protection: bool = False):
         async with self.lock:
             if join_string in self._discover_cache:
                 raise AlreadyJoinedError('chat is being discovered')
@@ -263,7 +270,7 @@ class BotManager:
         total = sum([len(await bot.get_subscribed_chats()) for bot in self.bots])
         weights = [total / len(await bot.get_subscribed_chats()) for bot in self.bots]
         bot: Bot = random.choices(self.bots, weights=weights)[0]
-        return await bot.discover_chat(join_string)
+        return await bot.discover_chat(join_string, ignore_protection=ignore_protection)
 
     async def get_messages(self, bot_index: int, chat_id: int, message_ids: Iterable[int]) -> list[PyrogramMessage]:
         return await self.bots[bot_index].get_messages(chat_id, message_ids=message_ids)  # type: ignore

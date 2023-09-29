@@ -57,10 +57,10 @@ async def get_known_chats_count() -> int:
 
 
 @shard.post('/discover')
-async def discover(join_string: str) -> None:
+async def discover(join_string: str, ignore_protection: bool = False) -> None:
     bot_manager = await BotManager.get_instance(config.SHARD_NUM)
     logger.info('discovering chat. join_string: %s', join_string)
-    await bot_manager.discover_chat(join_string)
+    await bot_manager.discover_chat(join_string, ignore_protection=ignore_protection)
 
 
 def main():
