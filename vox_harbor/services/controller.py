@@ -228,7 +228,8 @@ async def get_chats(name: tp.Optional[str] = None, join_string: tp.Optional[str]
 
 def main():
     auto_discover = AutoDiscover(discover)
-    auto_discover.start()
+    if not config.READ_ONLY:
+        auto_discover.start()
 
     server_config = uvicorn.Config(
         controller, host=config.CONTROLLER_HOST, port=config.CONTROLLER_PORT, log_config=None
