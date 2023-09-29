@@ -6,9 +6,17 @@ from operator import attrgetter
 import uvicorn
 from fastapi import FastAPI
 from pyrogram import types
+from pyrogram.types.messages_and_media.message import Message as PyrogramMessage
 
-from vox_harbor.big_bot.bots import BotManager
-from vox_harbor.big_bot.structures import Comment, Message, User, EmptyResponse
+from vox_harbor.big_bot.bots import Bot, BotManager
+from vox_harbor.big_bot.structures import (
+    Comment,
+    EmptyResponse,
+    Message,
+    Post,
+    PostText,
+    User,
+)
 from vox_harbor.common.config import config
 
 shard = FastAPI()
@@ -35,11 +43,7 @@ async def get_messages(sorted_comments: list[Comment]) -> list[Message]:
 
     msg: types.Message
     return [
-        Message(
-            text=msg.text,
-            chat=msg.chat.title or ' '.join((msg.chat.first_name, msg.chat.last_name)),
-            comment=cmt
-        )
+        Message(text=msg.text, chat=msg.chat.title or ' '.join((msg.chat.first_name, msg.chat.last_name)), comment=cmt)
         for msg, cmt in messages_zipped
         if msg is not None and msg.chat is not None
     ]
@@ -65,10 +69,11 @@ async def discover(join_string: str, ignore_protection: bool = False) -> None:
 
 @shard.get('/user_from_comment')
 async def get_user_from_comment(chat_id: int | str, message_id: int) -> User | EmptyResponse:
+    # todo
     bot_manager = await BotManager.get_instance(config.SHARD_NUM)
     bot = bot_manager[0]
 
-    message = await bot.get_messages(chat_id=chat_id, message_ids=message_id)
+    message = await bot.get_messages(chat_id=chat_id, message_ids=[message_id])
     if message is None:
         return EmptyResponse()
 
@@ -77,6 +82,19 @@ async def get_user_from_comment(chat_id: int | str, message_id: int) -> User | E
         username=message.from_user.username,
         name=' '.join(filter(None, (message.from_user.first_name, message.from_user.last_name))),
     )
+
+
+@shard.get('/post')
+async def get_post(channel_id: int, post_id: int, bot_index: int) -> PostText | EmptyResponse:
+    bot_manager = await BotManager.get_instance(config.SHARD_NUM)
+
+    message: list[PyrogramMessage] = await bot_manager.get_messages(
+        bot_index=bot_index, chat_id=channel_id, message_ids=[post_id]
+    )
+    if not message:
+        return EmptyResponse()
+
+    return PostText(text=message[0].text)
 
 
 def main():

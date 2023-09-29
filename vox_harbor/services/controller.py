@@ -8,7 +8,16 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from vox_harbor.big_bot.structures import Chat, Comment, Message, Post, User, UserInfo
+from vox_harbor.big_bot.structures import (
+    Chat,
+    Comment,
+    EmptyResponse,
+    Message,
+    Post,
+    PostText,
+    User,
+    UserInfo,
+)
 from vox_harbor.common.config import config
 from vox_harbor.common.db_utils import (
     clickhouse_default,
@@ -224,6 +233,22 @@ async def get_chats(name: tp.Optional[str] = None, join_string: tp.Optional[str]
     join_string = join_string and join_string + '%'
 
     return await db_fetchall(Chat, query, dict(name=name, join_string=join_string), 'Chats')
+
+
+@controller.get('/post')
+async def get_post(channel_id: int, post_id: int) -> PostText | EmptyResponse:
+    """Web UI"""
+    query = """--sql
+        SELECT *, data.key AS keys, data.value AS values
+        FROM posts
+        WHERE id = %(id)s AND channel_id = %(channel_id)s
+        LIMIT 1
+    """
+
+    post: Post = await db_fetchone(Post, query, dict(id=post_id, channel_id=channel_id), 'Post')
+
+    async with ShardClient(post.shard) as shard_client:
+        return await shard_client.get_post(post.channel_id, post.id, post.bot_index)
 
 
 def main():

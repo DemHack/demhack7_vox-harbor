@@ -2,7 +2,7 @@ from typing import Any, Iterable
 
 import httpx
 
-from vox_harbor.big_bot.structures import Comment, Message
+from vox_harbor.big_bot.structures import Comment, EmptyResponse, Message, PostText
 from vox_harbor.common.config import config
 
 
@@ -21,3 +21,8 @@ class ShardClient(httpx.AsyncClient):
 
     async def discover(self, join_string: str, ignore_protection: bool = False) -> None:
         await self.post('/discover', params=dict(join_string=join_string, ignore_protection=ignore_protection))
+
+    async def get_post(self, channel_id: int, post_id: int, bot_index: int) -> PostText | EmptyResponse:
+        return PostText.model_validate(
+            (await self.get('/post', params=dict(channel_id=channel_id, post_id=post_id, bot_index=bot_index))).json()
+        )

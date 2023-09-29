@@ -145,3 +145,7 @@ class Post(NewPost):
     point_date: datetime.datetime
     keys: list[str]
     values: list[int]
+
+
+class PostText(pydantic.BaseModel):
+    text: tp.Optional[str]
