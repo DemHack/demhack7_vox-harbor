@@ -8,12 +8,13 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from vox_harbor.big_bot.structures import Comment, Message, Post, User, UserInfo
+from vox_harbor.big_bot.structures import Chat, Comment, Message, Post, User, UserInfo
 from vox_harbor.common.config import config
 from vox_harbor.common.db_utils import (
     clickhouse_default,
     db_execute,
     db_fetchall,
+    db_fetchone,
     rows_to_unique_column,
 )
 from vox_harbor.common.exceptions import NotFoundError
@@ -182,6 +183,19 @@ async def remove_bot(bot_id: int) -> None:
     await db_execute(query, dict(bot_id=bot_id))
 
 
+
+@controller.get('/get_chat')
+async def get_chat(chat_id: int) -> Chat:
+    """Web UI"""
+    query = """--sql
+        SELECT *
+        FROM chats
+        WHERE id = %(chat_id)s
+    """
+
+    return await db_fetchone(Chat, query, dict(chat_id=chat_id))
+
+
 @controller.get('/get_reactions')
 async def get_reactions(channel_id: int, post_id: int) -> list[Post]:
     """Web UI"""
@@ -193,6 +207,7 @@ async def get_reactions(channel_id: int, post_id: int) -> list[Post]:
     """
 
     return await db_fetchall(Post, query, dict(id=post_id, channel_id=channel_id), 'Reactions')
+
 
 
 def main():
