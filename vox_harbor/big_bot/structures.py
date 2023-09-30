@@ -99,12 +99,17 @@ class Message(pydantic.BaseModel):
 
 class User(_Base):
     user_id: int
-    username: str
-    name: str
+    username: tp.Optional[str]
+    name: tp.Optional[str]
 
 
 class EmptyResponse(_Base):
     pass
+
+
+class ParsedMsgURL(pydantic.BaseModel):
+    chat_id: int | str
+    message_id: int
 
 
 class UserInfo(_Base):

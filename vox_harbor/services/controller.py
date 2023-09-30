@@ -7,12 +7,14 @@ from operator import attrgetter
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pyrogram import utils
 
 from vox_harbor.big_bot.structures import (
     Chat,
     Comment,
     EmptyResponse,
     Message,
+    ParsedMsgURL,
     Post,
     PostText,
     User,
@@ -29,6 +31,7 @@ from vox_harbor.common.db_utils import (
 from vox_harbor.common.exceptions import BadRequestError, NotFoundError
 from vox_harbor.services.auto_discover import AutoDiscover
 from vox_harbor.services.shard_client import ShardClient
+from vox_harbor.services.utils import parse_msg_url
 
 logger = logging.getLogger('vox_harbor.big_bot.services.controller')
 
@@ -48,14 +51,42 @@ async def get_user(user_id: int) -> UserInfo:
     return _users_to_user_info(await _get_users_by_user_ids(user_ids=[user_id]))
 
 
-@controller.get('/user_by_msg_link')
-async def get_user_by_msg_link(msg_link: str) -> UserInfo:
-    """Web UI (consumer)"""
-    # user_id = USER.user_id
+@controller.get('/user_by_msg_url')
+async def get_user_by_msg_url(msg_url: str) -> UserInfo | User:
+    try:
+        parsed_url: ParsedMsgURL = parse_msg_url(msg_url)
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
 
-    # todo
+    logger.info('parsed_url: %s', repr(parsed_url))
 
-    # return await get_user(user_id=user_id)
+    if isinstance(parsed_url.chat_id, int):
+        query = """--sql
+            SELECT *
+            FROM chats
+            WHERE id = %(id)s
+            LIMIT 1
+        """
+
+        chat_id_100 = utils.get_channel_id(parsed_url.chat_id)
+        logger.info('chat_id_100 - %s', chat_id_100)
+
+        chat: Chat = await db_fetchone(Chat, query, dict(id=chat_id_100))
+        bot_index, shard = chat.bot_index, chat.shard
+
+    else:  # public chat
+        bot_index = shard = 0
+
+    async with ShardClient(shard) as shard_client:
+        user = await shard_client.get_user_by_msg(parsed_url.chat_id, parsed_url.message_id, bot_index)
+
+    if isinstance(user, EmptyResponse):
+        raise NotFoundError('user')
+
+    try:
+        return await get_user(user.user_id)
+    except NotFoundError:
+        return user
 
 
 @controller.get('/users')
@@ -264,6 +295,8 @@ def main():
 
 
 async def _dev_main() -> None:
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)6s - %(name)s - %(message)s')
+
     async with clickhouse_default():
         server_config = uvicorn.Config(controller, host=config.CONTROLLER_HOST, port=config.CONTROLLER_PORT)
         await uvicorn.Server(server_config).serve()

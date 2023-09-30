@@ -272,7 +272,9 @@ class BotManager:
         bot: Bot = random.choices(self.bots, weights=weights)[0]
         return await bot.discover_chat(join_string, ignore_protection=ignore_protection)
 
-    async def get_messages(self, bot_index: int, chat_id: int, message_ids: Iterable[int]) -> list[PyrogramMessage]:
+    async def get_messages(
+        self, bot_index: int, chat_id: int | str, message_ids: Iterable[int]
+    ) -> list[PyrogramMessage]:
         return await self.bots[bot_index].get_messages(chat_id, message_ids=message_ids)  # type: ignore
 
     @classmethod

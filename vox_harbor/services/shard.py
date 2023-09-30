@@ -67,15 +67,18 @@ async def discover(join_string: str, ignore_protection: bool = False) -> None:
     await bot_manager.discover_chat(join_string, ignore_protection=ignore_protection)
 
 
-@shard.get('/user_from_comment')
-async def get_user_from_comment(chat_id: int | str, message_id: int) -> User | EmptyResponse:
-    # todo
+@shard.get('/user_by_msg')
+async def get_user_by_msg(chat_id: int | str, message_id: int, bot_index: int) -> User | EmptyResponse:
     bot_manager = await BotManager.get_instance(config.SHARD_NUM)
-    bot = bot_manager[0]
+    messages: list[PyrogramMessage] = await bot_manager.get_messages(bot_index, chat_id, [message_id])
 
-    message = await bot.get_messages(chat_id=chat_id, message_ids=[message_id])
-    if message is None:
+    logger.info('user_by_msg - messages: %s', messages)
+
+    if not messages or messages[0].empty:
         return EmptyResponse()
+    message = messages[0]
+
+    logger.info('user_by_msg - message: %s', message)
 
     return User(
         user_id=message.from_user.id,
