@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import random
 import typing as tp
 from itertools import chain, groupby
 from operator import attrgetter
@@ -8,7 +7,6 @@ from operator import attrgetter
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from httpcore import AsyncConnectionInterface
 from pyrogram import utils
 
 from vox_harbor.big_bot.structures import (
@@ -35,12 +33,11 @@ from vox_harbor.common.db_utils import (
     session_scope,
 )
 from vox_harbor.common.exceptions import BadRequestError, NotFoundError
+from vox_harbor.gpt.main import Model
 
 # from vox_harbor.services.auto_discover import AutoDiscover
 from vox_harbor.services.shard_client import ShardClient
 from vox_harbor.services.utils import parse_msg_url
-
-from vox_harbor.gpt.main import Model
 
 logger = logging.getLogger('vox_harbor.big_bot.services.controller')
 
@@ -215,19 +212,17 @@ async def get_messages_by_user_id(user_id: int, limit: int = 10) -> list[Message
 
 
 @controller.get('/comments')
-async def get_comments(user_id: int, limit: int = -1) -> list[Comment]:
+async def get_comments(user_id: int, offset: int = 0, fetch: int = 10) -> list[Comment]:
     """Web UI (consumer). Use with get_messages."""
     query = """--sql
         SELECT *
         FROM comments
-        WHERE user_id = %(user_id)s 
-        ORDER BY date
+        WHERE user_id = %(user_id)s
+        ORDER BY date OFFSET %(offset)s ROW
+        FETCH FIRST %(fetch)s ROWS ONLY;
     """
 
-    if limit > 0:
-        query += f'LIMIT {limit}'
-
-    return await db_fetchall(Comment, query, dict(user_id=user_id), name='messages')
+    return await db_fetchall(Comment, query, dict(user_id=user_id, offset=offset * fetch, fetch=fetch), name='comments')
 
 
 @controller.post('/messages')
