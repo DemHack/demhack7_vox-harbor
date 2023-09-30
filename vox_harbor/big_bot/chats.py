@@ -79,6 +79,8 @@ class ChatsManager:
                     try:
                         await bot.leave_chat(chat.id)
                         leave_count += 1
+
+                        await asyncio.sleep(30)
                     except Exception as e:
                         self.logger.error('failed to leave chat %s: %s', chat.name, format_exception(e))
 
@@ -90,10 +92,9 @@ class ChatsManager:
                 try:
                     if chat.join_string:
                         await bot.discover_chat(chat.join_string, join_no_check=True)
-                    else:
-                        await bot.join_chat(chat.id)
 
-                    join_count += 1
+                        join_count += 1
+                        await asyncio.sleep(30)
                 except Exception as e:
                     self.logger.error('failed to join chat %s: %s', chat.name, format_exception(e))
 

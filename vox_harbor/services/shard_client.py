@@ -18,6 +18,7 @@ logger = logging.getLogger(f'vox_harbor.services.shard_client')
 class ShardClient(httpx.AsyncClient):
     def __init__(self, shard: int, **kwargs: Any) -> None:
         kwargs['base_url'] = config.shard_url(shard)
+        kwargs['timeout'] = 120
         super().__init__(**kwargs)
 
     async def get_messages(self, sorted_comments: Iterable[Comment]) -> list[Message]:

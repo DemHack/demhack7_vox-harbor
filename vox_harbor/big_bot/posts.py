@@ -49,6 +49,9 @@ class PostManager:
         if datetime.datetime.utcnow() - last_updated > datetime.timedelta(seconds=self._get_update_interval(post.post_date)):
             bot = self.bots[post.bot_index]
 
+            if post.channel_id not in await bot.get_subscribed_chats():
+                return
+
             try:
                 message = await bot.get_messages(chat_id=post.channel_id, message_ids=post.id)
                 if not message or not message.chat:

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import random
 import typing as tp
 from itertools import chain, groupby
 from operator import attrgetter
@@ -17,6 +18,7 @@ from vox_harbor.big_bot.structures import (
     ParsedMsgURL,
     Post,
     PostText,
+    Sample,
     User,
     UserInfo,
 )
@@ -27,9 +29,10 @@ from vox_harbor.common.db_utils import (
     db_fetchall,
     db_fetchone,
     rows_to_unique_column,
+    session_scope
 )
 from vox_harbor.common.exceptions import BadRequestError, NotFoundError
-from vox_harbor.services.auto_discover import AutoDiscover
+# from vox_harbor.services.auto_discover import AutoDiscover
 from vox_harbor.services.shard_client import ShardClient
 from vox_harbor.services.utils import parse_msg_url
 
@@ -282,10 +285,92 @@ async def get_post(channel_id: int, post_id: int) -> PostText | EmptyResponse:
         return await shard_client.get_post(post.channel_id, post.id, post.bot_index)
 
 
+@controller.get('/random_users')
+async def get_random_users() -> list[int]:
+    async with session_scope() as session:
+        await session.execute(
+            'SELECT user_id FROM comments\n'
+            'GROUP BY user_id\n'
+            'HAVING count() > 20\n'
+            'ORDER BY rand()\n'
+            'LIMIT 100\n'
+        )
+        # await session.execute(
+        #     'SELECT user_id, count(DISTINCT chat_id) as c FROM comments\n'
+        #     'GROUP BY user_id\n'
+        #     'HAVING c > 5\n'
+        #     'ORDER BY rand()\n'
+        # )
+        data = await session.fetchall()
+
+        return [x['user_id'] for x in data]
+
+
+@controller.get('/sample')
+async def get_sample(user_id: int | None = None) -> Sample:
+    if user_id is None:
+        async with session_scope() as session:
+            await session.execute('SELECT count() FROM users')
+            size = await session.fetchone()
+
+        offset = random.randint(0, next(iter(size.values())))
+        _user = await db_fetchone(User, 'SELECT * FROM users LIMIT 1 OFFSET %(offset)s', dict(offset=offset))
+        user_id = _user.user_id
+
+    user = await get_user(user_id)
+
+    channels = await db_fetchall(
+        Sample.ChannelCommentsCount,
+        'SELECT name as channel_name, count() as count FROM comments\n'
+        'INNER JOIN chats ON comments.chat_id = chats.id\n'
+        'WHERE comments.user_id = %(user_id)s\n'
+        'GROUP BY chat_id, name\n'
+        'ORDER BY count DESC',
+        dict(user_id=user_id),
+        raise_not_found=False,
+    )
+
+    comments = await get_comments(user_id, limit=1000)
+    comments.reverse()
+
+    recent_comments = comments[:10]
+    recent_messages = [
+        Sample.Comment(
+            chat_name=m.chat,
+            date=m.comment.date,
+            text=m.text or '<no text>',
+            post_id=m.comment.post_id,
+        )
+        for m in await get_messages(recent_comments)
+    ]
+
+    old_comments_count = max(min(len(comments) - 10, 10), 0)
+    if old_comments_count > 0:
+        old_comments = comments[-old_comments_count:]
+        old_messages = [
+            Sample.Comment(
+                chat_name=m.chat,
+                date=m.comment.date,
+                text=m.text or '<no text>',
+                post_id=m.comment.post_id,
+            )
+            for m in await get_messages(old_comments)
+        ]
+    else:
+        old_messages = []
+
+    return Sample(
+        user=user,
+        most_recent_comments=recent_messages,
+        most_old_comments=old_messages,
+        channels=channels
+    )
+
+
 def main():
-    auto_discover = AutoDiscover(discover)
-    if not config.READ_ONLY:
-        auto_discover.start()
+    # auto_discover = AutoDiscover(discover)
+    # if not config.READ_ONLY:
+    #     auto_discover.start()
 
     server_config = uvicorn.Config(
         controller, host=config.CONTROLLER_HOST, port=config.CONTROLLER_PORT, log_config=None

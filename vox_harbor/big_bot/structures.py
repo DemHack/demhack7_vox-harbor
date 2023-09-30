@@ -152,5 +152,24 @@ class Post(NewPost):
     values: list[int]
 
 
+class Sample(_Base):
+    class Comment(_Base):
+        chat_name: str
+        date: datetime.datetime
+        text: str
+        post_id: int | None
+
+    class ChannelCommentsCount(_Base):
+        channel_name: str
+        count: int
+
+    user: UserInfo
+
+    most_recent_comments: list[Comment]
+    most_old_comments: list[Comment]
+
+    channels: list[ChannelCommentsCount]
+
+
 class PostText(pydantic.BaseModel):
     text: tp.Optional[str]

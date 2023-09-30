@@ -2,7 +2,7 @@ import asyncio
 import datetime
 import logging
 import random
-from typing import Iterable
+from typing import Sequence
 
 import cachetools
 import pyrogram.errors.exceptions
@@ -20,10 +20,11 @@ from vox_harbor.common.exceptions import format_exception
 
 
 class Bot(Client):
-    INTERVAL = 60
+    INTERVAL = 120
+    lock = asyncio.Lock()
 
     def __init__(self, *args, bot_index, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, sleep_threshold=120, **kwargs)
 
         self.index = bot_index
 
@@ -46,6 +47,7 @@ class Bot(Client):
         self.logger.info('callback resolved')
 
     async def update_subscribed_chats(self):
+        self.logger.info('updating subscribed chats')
         new_chats = set()
 
         async for dialog in self.get_dialogs():
@@ -56,13 +58,14 @@ class Bot(Client):
         return self._subscribed_chats
 
     async def get_subscribed_chats(self):
-        if (
-            not self._subscribed_chats
-            or datetime.datetime.now().timestamp() - self._subscribed_chats_last_updated > self.INTERVAL
-        ):
-            await self.update_subscribed_chats()
+        async with self.lock:
+            if (
+                not self._subscribed_chats
+                or datetime.datetime.now().timestamp() - self._subscribed_chats_last_updated > self.INTERVAL
+            ):
+                await self.update_subscribed_chats()
 
-        return self._subscribed_chats
+            return self._subscribed_chats
 
     def add_subscribed_chat(self, chat_id: int):
         self._subscribed_chats.add(chat_id)
@@ -134,9 +137,10 @@ class Bot(Client):
             await self.join_chat(chat.id)
         else:
             await self.try_join_discovered_chat(chat, str(join_string))
-            if with_linked and chat.linked_chat:
-                linked_join_string = chat.linked_chat.username or str(chat.linked_chat.id)
-                await self.discover_chat(linked_join_string, with_linked=False, ignore_protection=ignore_protection)
+
+        if with_linked and chat.linked_chat:
+            linked_join_string = chat.linked_chat.username or ''
+            await self.discover_chat(linked_join_string, with_linked=False, ignore_protection=ignore_protection, join_no_check=join_no_check)
 
     async def try_join_discovered_chat(self, chat: types.Chat, join_string: str):
         if chat.id == 777000:
@@ -272,10 +276,11 @@ class BotManager:
         bot: Bot = random.choices(self.bots, weights=weights)[0]
         return await bot.discover_chat(join_string, ignore_protection=ignore_protection)
 
-    async def get_messages(
-        self, bot_index: int, chat_id: int | str, message_ids: Iterable[int]
-    ) -> list[PyrogramMessage]:
-        return await self.bots[bot_index].get_messages(chat_id, message_ids=message_ids)  # type: ignore
+    async def get_messages(self, bot_index: int, chat_id: int | str, message_ids: Sequence[int]) -> list[PyrogramMessage | None]:
+        try:
+            return await self.bots[bot_index].get_messages(chat_id, message_ids=message_ids)  # type: ignore
+        except pyrogram.errors.exceptions.bad_request_400.BadRequest:
+            return [None] * len(message_ids)
 
     @classmethod
     async def get_instance(cls, shard: int = config.SHARD_NUM) -> 'BotManager':
