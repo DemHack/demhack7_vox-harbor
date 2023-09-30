@@ -37,6 +37,7 @@ class _Config(pds.BaseSettings):
     READ_ONLY: bool = False
 
     OPENAI_KEY: str = ''
+    OPENAI_MODEL: str = ''
 
     # noinspection PyPep8Naming
     @pd.field_validator('SHARD_ENDPOINTS', mode='before')

@@ -175,6 +175,19 @@ class Sample(_Base):
     channels: list[ChannelCommentsCount]
 
 
+class CheckUserResult(_Base):
+    class Type(enum.StrEnum):
+        USER = 'USER'
+        KREMLIN_BOT = 'KREMLIN_BOT'
+        TROLL_BOT = 'TROLL_BOT'
+        KADYROV_BOT = 'KADYROV_BOT'
+
+    user_id: int
+    date: datetime.datetime
+    type: Type
+    manual_confirmed: bool = False
+
+
 class PostText(pydantic.BaseModel):
     text: tp.Optional[str]
 

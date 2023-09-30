@@ -13,6 +13,7 @@ httpx==0.25.0
 idna==3.4
 leb128==1.0.5
 lz4==4.3.2
+openai==0.28.1
 pyaes==1.6.1
 pydantic==2.3.0
 pydantic_core==2.6.3

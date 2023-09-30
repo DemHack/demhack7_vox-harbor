@@ -13,6 +13,7 @@ from pyrogram import utils
 
 from vox_harbor.big_bot.structures import (
     Chat,
+    CheckUserResult,
     Comment,
     EmptyResponse,
     Message,
@@ -38,6 +39,8 @@ from vox_harbor.common.exceptions import BadRequestError, NotFoundError
 # from vox_harbor.services.auto_discover import AutoDiscover
 from vox_harbor.services.shard_client import ShardClient
 from vox_harbor.services.utils import parse_msg_url
+
+from vox_harbor.gpt.main import Model
 
 logger = logging.getLogger('vox_harbor.big_bot.services.controller')
 
@@ -106,6 +109,11 @@ async def _get_users(query: str) -> list[UserInfo]:
     logger.info('_get_users - users: %s', users)
 
     return users
+
+
+@controller.get('/healthcheck')
+async def healthcheck() -> str:
+    return 'OK'
 
 
 @controller.get('/user')
@@ -367,16 +375,7 @@ async def get_random_users() -> list[int]:
 
 
 @controller.get('/sample')
-async def get_sample(user_id: int | None = None) -> Sample:
-    if user_id is None:
-        async with session_scope() as session:
-            await session.execute('SELECT count() FROM users')
-            size = await session.fetchone()
-
-        offset = random.randint(0, next(iter(size.values())))
-        _user = await db_fetchone(User, 'SELECT * FROM users LIMIT 1 OFFSET %(offset)s', dict(offset=offset))
-        user_id = _user.user_id
-
+async def get_sample(user_id: int) -> Sample:
     user = await get_user(user_id)
 
     channels = await db_fetchall(
@@ -404,7 +403,7 @@ async def get_sample(user_id: int | None = None) -> Sample:
         for m in await get_messages(recent_comments)
     ]
 
-    old_comments_count = max(min(len(comments) - 10, 10), 0)
+    old_comments_count = max(min(len(comments) - 5, 5), 0)
     if old_comments_count > 0:
         old_comments = comments[-old_comments_count:]
         old_messages = [
@@ -420,6 +419,12 @@ async def get_sample(user_id: int | None = None) -> Sample:
         old_messages = []
 
     return Sample(user=user, most_recent_comments=recent_messages, most_old_comments=old_messages, channels=channels)
+
+
+@controller.get('/check_user')
+async def check_user(user_id: int) -> CheckUserResult.Type | None:
+    model = await Model.get_instance()
+    return await model.check_user(user_id)
 
 
 def main():
