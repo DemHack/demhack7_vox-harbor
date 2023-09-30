@@ -8,6 +8,7 @@ from operator import attrgetter
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from httpcore import AsyncConnectionInterface
 from pyrogram import utils
 
 from vox_harbor.big_bot.structures import (
@@ -21,6 +22,7 @@ from vox_harbor.big_bot.structures import (
     Sample,
     User,
     UserInfo,
+    UsersAndChats,
 )
 from vox_harbor.common.config import config
 from vox_harbor.common.db_utils import (
@@ -29,9 +31,10 @@ from vox_harbor.common.db_utils import (
     db_fetchall,
     db_fetchone,
     rows_to_unique_column,
-    session_scope
+    session_scope,
 )
 from vox_harbor.common.exceptions import BadRequestError, NotFoundError
+
 # from vox_harbor.services.auto_discover import AutoDiscover
 from vox_harbor.services.shard_client import ShardClient
 from vox_harbor.services.utils import parse_msg_url
@@ -48,6 +51,63 @@ controller.add_middleware(
 )
 
 
+@controller.get('/users_and_chats')
+async def get_users_and_chats(query: str) -> UsersAndChats:
+    users = _get_users(query)
+    chats = _get_chats(query)
+    users, chats = await asyncio.gather(users, chats)
+
+    return UsersAndChats(users=users, chats=chats)
+
+
+async def _get_chats(query: str) -> list[Chat]:
+    getters = ((get_chat, 'chat_id'), (get_chats, 'join_string'), (get_chats, 'name'))
+    chats: list[Chat] = []
+
+    for func, arg_name in getters:
+        logger.info('_get_chats - arg_name: %s', arg_name)  # todo logs mix due to async :(
+
+        try:
+            response = await func(**{arg_name: query})  # todo make truly async
+        except Exception as exc:
+            logger.info('_get_chats - response exc: %s', exc)
+            continue
+
+        if not isinstance(response, list):
+            response = [response]
+        logger.info('_get_chats - response: %s', response)
+
+        chats += response
+
+    logger.info('_get_chats - chats: %s', chats)
+
+    return chats
+
+
+async def _get_users(query: str) -> list[UserInfo]:
+    getters = ((get_users, 'username'), (get_user, 'user_id'), (get_user_by_msg_url, 'msg_url'))
+    users: list[UserInfo] = []
+
+    for func, arg_name in getters:
+        logger.info('_get_users - arg_name: %s', arg_name)  # todo logs mix due to async :(
+
+        try:
+            response = await func(**{arg_name: query})  # todo make truly async
+        except Exception as exc:
+            logger.info('_get_users - response exc: %s', exc)
+            continue
+
+        if not isinstance(response, list):
+            response = [response]
+        logger.info('_get_users - response: %s', response)
+
+        users += response
+
+    logger.info('_get_users - users: %s', users)
+
+    return users
+
+
 @controller.get('/user')
 async def get_user(user_id: int) -> UserInfo:
     """Web UI (consumer)"""
@@ -55,7 +115,7 @@ async def get_user(user_id: int) -> UserInfo:
 
 
 @controller.get('/user_by_msg_url')
-async def get_user_by_msg_url(msg_url: str) -> UserInfo | User:
+async def get_user_by_msg_url(msg_url: str) -> UserInfo:
     try:
         parsed_url: ParsedMsgURL = parse_msg_url(msg_url)
     except ValueError as exc:
@@ -89,7 +149,7 @@ async def get_user_by_msg_url(msg_url: str) -> UserInfo | User:
     try:
         return await get_user(user.user_id)
     except NotFoundError:
-        return user
+        return UserInfo.from_user(user)
 
 
 @controller.get('/users')
@@ -359,12 +419,7 @@ async def get_sample(user_id: int | None = None) -> Sample:
     else:
         old_messages = []
 
-    return Sample(
-        user=user,
-        most_recent_comments=recent_messages,
-        most_old_comments=old_messages,
-        channels=channels
-    )
+    return Sample(user=user, most_recent_comments=recent_messages, most_old_comments=old_messages, channels=channels)
 
 
 def main():

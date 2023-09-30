@@ -114,8 +114,12 @@ class ParsedMsgURL(pydantic.BaseModel):
 
 class UserInfo(_Base):
     user_id: int
-    usernames: list[str]
-    names: list[str]
+    usernames: list[tp.Optional[str]]
+    names: list[tp.Optional[str]]
+
+    @classmethod
+    def from_user(cls, user: User):
+        return UserInfo(user_id=user.user_id, usernames=[user.username], names=[user.name])
 
     def __eq__(self, other: tp.Self):
         return (
@@ -173,3 +177,8 @@ class Sample(_Base):
 
 class PostText(pydantic.BaseModel):
     text: tp.Optional[str]
+
+
+class UsersAndChats(pydantic.BaseModel):
+    users: list[UserInfo]
+    chats: list[Chat]
