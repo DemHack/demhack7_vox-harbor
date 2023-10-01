@@ -189,7 +189,7 @@ class CheckUserResult(_Base):
 
     user_id: int
     date: datetime.datetime
-    type: Type
+    TYPE: Type
     manual_confirmed: bool = False
 
 

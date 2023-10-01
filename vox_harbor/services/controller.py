@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import logging
 import typing as tp
 from itertools import chain, groupby
@@ -410,7 +411,7 @@ async def get_sample(user_id: int) -> Sample:
         raise_not_found=False,
     )
 
-    comments = await get_comments(user_id, limit=1000)
+    comments = await get_comments(user_id, fetch=1000)
     comments.reverse()
 
     recent_comments = comments[:10]
@@ -445,7 +446,30 @@ async def get_sample(user_id: int) -> Sample:
 @controller.get('/check_user')
 async def check_user(user_id: int) -> CheckUserResult.Type | None:
     model = await Model.get_instance()
-    return await model.check_user(user_id)
+    resut_type: CheckUserResult.Type | None = await model.check_user(user_id)
+
+    if resut_type:
+        result_cache = CheckUserResult(user_id=user_id, date=datetime.datetime.utcnow(), TYPE=resut_type)
+        async with session_scope() as session:
+            await session.execute('INSERT INTO check_results VALUES', [result_cache.model_dump()])
+
+    return resut_type
+
+
+@controller.get('/check_user_with_cache')
+async def check_user_with_cache(user_id: int) -> CheckUserResult.Type | None:
+    query = """--sql
+        SELECT *
+        FROM check_results 
+        WHERE user_id = %(user_id)s
+        ORDER BY date
+        LIMIT 1
+    """
+
+    try:
+        return (await db_fetchone(CheckUserResult, query, dict(user_id=user_id))).TYPE
+    except NotFoundError:
+        return await check_user(user_id)
 
 
 @controller.get('/comment_count')
