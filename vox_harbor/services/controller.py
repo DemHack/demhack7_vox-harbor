@@ -17,6 +17,7 @@ from vox_harbor.big_bot.structures import (
     EmptyResponse,
     Message,
     ParsedMsgURL,
+    ParsedPostURL,
     Post,
     PostText,
     Sample,
@@ -38,7 +39,7 @@ from vox_harbor.gpt.main import Model
 
 # from vox_harbor.services.auto_discover import AutoDiscover
 from vox_harbor.services.shard_client import ShardClient
-from vox_harbor.services.utils import parse_msg_url
+from vox_harbor.services.utils import parse_msg_url, parse_post_url
 
 logger = logging.getLogger('vox_harbor.big_bot.services.controller')
 
@@ -303,9 +304,33 @@ async def get_chat(chat_id: int) -> Chat:
     return await db_fetchone(Chat, query, dict(chat_id=chat_id))
 
 
+@controller.get('/reactions_by_url')
+async def get_reactions_by_url(post_url: str) -> list[Post]:
+    """Web UI"""
+    try:
+        parsed_url: ParsedPostURL = parse_post_url(post_url)
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+
+    query = """--sql
+        SELECT *, data.key AS keys, data.value AS values
+        FROM posts
+        WHERE id = %(post_id)s
+            AND channel_id = (
+                SELECT id
+                FROM chats
+                WHERE join_string = %(channel_nick)s
+            )
+        ORDER BY point_date ASC
+    """
+
+    return await db_fetchall(
+        Post, query, dict(post_id=parsed_url.post_id, channel_nick=parsed_url.channel_nick), 'Reactions'
+    )
+
+
 @controller.get('/reactions')
 async def get_reactions(channel_id: int, post_id: int) -> list[Post]:
-    """Web UI"""
     query = """--sql
         SELECT *, data.key AS keys, data.value AS values
         FROM posts

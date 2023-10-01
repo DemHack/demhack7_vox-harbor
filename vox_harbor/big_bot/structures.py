@@ -112,6 +112,11 @@ class ParsedMsgURL(pydantic.BaseModel):
     message_id: int
 
 
+class ParsedPostURL(pydantic.BaseModel):
+    channel_nick: str
+    post_id: int
+
+
 class UserInfo(_Base):
     user_id: int
     usernames: list[tp.Optional[str]]
