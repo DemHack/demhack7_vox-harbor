@@ -13,6 +13,7 @@ from vox_harbor.big_bot.structures import (
     Chat,
     CheckUserResult,
     Comment,
+    CommentCount,
     EmptyResponse,
     Message,
     ParsedMsgURL,
@@ -420,6 +421,16 @@ async def get_sample(user_id: int) -> Sample:
 async def check_user(user_id: int) -> CheckUserResult.Type | None:
     model = await Model.get_instance()
     return await model.check_user(user_id)
+
+
+@controller.get('/comment_count')
+async def get_comment_count(user_id: int) -> CommentCount:
+    query = """--sql
+        SELECT COUNT(*) comment_count
+        FROM comments
+        WHERE user_id = %(user_id)s
+    """
+    return await db_fetchone(CommentCount, query, dict(user_id=user_id), 'Comments')
 
 
 def main():

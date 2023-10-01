@@ -195,3 +195,7 @@ class PostText(pydantic.BaseModel):
 class UsersAndChats(pydantic.BaseModel):
     users: list[UserInfo]
     chats: list[Chat]
+
+
+class CommentCount(_Base):
+    comment_count: int
