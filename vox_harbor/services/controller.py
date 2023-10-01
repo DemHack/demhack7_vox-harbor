@@ -411,7 +411,7 @@ async def get_sample(user_id: int) -> Sample:
         raise_not_found=False,
     )
 
-    comments = await get_comments(user_id, limit=1000)
+    comments = await get_comments(user_id, fetch=1000)
     comments.reverse()
 
     recent_comments = comments[:10]
