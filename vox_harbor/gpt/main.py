@@ -1,6 +1,8 @@
 import logging
+from typing import Optional
 
 import openai
+
 from vox_harbor.big_bot import structures
 from vox_harbor.common.config import config
 from vox_harbor.common.exceptions import format_exception
@@ -34,18 +36,17 @@ class Model:
 
     def __init__(self):
         from vox_harbor.services import controller  # circular imports
+
         self.controller = controller
 
     def generate_request(self, sample: structures.Sample) -> str:
         recent_comments = []
         for comment in sample.most_recent_comments:
-            recent_comments.append(
-                f'<{comment.date}> {comment.chat_name} ({comment.post_id}): {repr(comment.text)}')
+            recent_comments.append(f'<{comment.date}> {comment.chat_name} ({comment.post_id}): {repr(comment.text)}')
 
         old_comments = []
         for comment in sample.most_old_comments:
-            old_comments.append(
-                f'<{comment.date}> {comment.chat_name} ({comment.post_id}): {repr(comment.text)}')
+            old_comments.append(f'<{comment.date}> {comment.chat_name} ({comment.post_id}): {repr(comment.text)}')
 
         channels = []
         for c in sample.channels:
@@ -60,7 +61,7 @@ class Model:
             channels='\n'.join(channels),
         )
 
-    async def check_user(self, user_id: int) -> structures.CheckUserResult.Type:
+    async def check_user(self, user_id: int) -> Optional[structures.CheckUserResult.Type]:
         value = None
         try:
             sample = await self.controller.get_sample(user_id)
@@ -77,10 +78,7 @@ class Model:
                 },
             ]
 
-            completion = await openai.ChatCompletion.acreate(
-                model=config.OPENAI_MODEL,
-                messages=data
-            )
+            completion = await openai.ChatCompletion.acreate(model=config.OPENAI_MODEL, messages=data)
 
             return structures.CheckUserResult.Type(completion.choices[0].message.content)
         except Exception as e:
@@ -96,4 +94,3 @@ class Model:
 
 
 _model: Model | None = None
-
